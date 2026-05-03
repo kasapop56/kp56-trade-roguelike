@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { generateBoard, createSeededRng } from '../lib/boardGenerator'
-import { simulateTrade } from '../lib/tradeSimulator'
+import { simulateTrade, type SimulateTradeResult } from '../lib/tradeSimulator'
 import { aggregateStats as mergeStats } from '../lib/statsAggregator'
 import { buildRunSummary, type RunSummary } from '../lib/archetypeEngine'
 
@@ -47,6 +47,12 @@ export type MysteryOutcome = {
   equityDelta: number
 }
 
+export type PendingTrade = {
+  result: SimulateTradeResult
+  finalEquityDelta: number   // includes perk bonuses applied
+  perkConsumed: boolean
+}
+
 export type Run = {
   seed: string
   candles: Candle[]
@@ -71,6 +77,9 @@ export type Run = {
   pendingWisdomChoices: PerkType[] | null   // non-null while player must choose
   freeSkipsRemaining: number
   pendingMysteryOutcome: MysteryOutcome | null
+
+  // trade resolution state (set after BUY/SELL, cleared after Continue)
+  pendingTrade: PendingTrade | null
 }
 
 export type Stats = {
@@ -107,6 +116,7 @@ type Store = {
   selectPerk: (perk: PerkType) => void
   dismissMysteryOutcome: () => void
   decideTrade: (a: TradeAction, setupGuess?: SetupType | null) => void
+  confirmTradeResult: () => void
   endRun: () => void
   dismissScorecard: () => void
   toggleSound: () => void
@@ -142,6 +152,7 @@ export const useGameStore = create<Store>()(
             pendingWisdomChoices: null,
             freeSkipsRemaining: 0,
             pendingMysteryOutcome: null,
+            pendingTrade: null,
           },
         })
       },
@@ -246,11 +257,10 @@ export const useGameStore = create<Store>()(
           bonusROnWin = 0.5; perkConsumed = true
         }
         if (r.activePerk === 'bull_vision') {
-          // already consumed when perk was selected (free correct bias)
           perkConsumed = true
         }
 
-        const { record, equityDelta } = simulateTrade({
+        const result = simulateTrade({
           action,
           squareIndex: r.currentSquareIndex,
           squareStartCandle: sq.candleStart,
@@ -263,18 +273,47 @@ export const useGameStore = create<Store>()(
           setupGuess,
         })
 
-        const finalDelta = equityDelta > 0
-          ? equityDelta + bonusROnWin * r.equity * RISK_PER_TRADE
-          : equityDelta
+        const finalEquityDelta = result.equityDelta > 0
+          ? result.equityDelta + bonusROnWin * r.equity * RISK_PER_TRADE
+          : result.equityDelta
+
+        // SKIP: no animation, no overlay → confirm immediately
+        if (action === 'skip') {
+          set({
+            run: {
+              ...r,
+              trades: [...r.trades, result.record],
+              squares: r.squares.map((s, i) => i === r.currentSquareIndex ? { ...s, resolved: true } : s),
+              awaitingTradeDecision: false,
+              activePerk: perkConsumed ? null : r.activePerk,
+            },
+          })
+          return
+        }
+
+        // BUY/SELL: stash pendingTrade, reveal forward candles toward exit (chart animates)
+        set({
+          run: {
+            ...r,
+            awaitingTradeDecision: false,
+            revealedCandleIndex: result.exitCandleIndex + 1,
+            pendingTrade: { result, finalEquityDelta, perkConsumed },
+          },
+        })
+      },
+
+      confirmTradeResult: () => {
+        const r = get().run; if (!r || !r.pendingTrade) return
+        const { result, finalEquityDelta, perkConsumed } = r.pendingTrade
 
         set({
           run: {
             ...r,
-            equity: Math.max(0, r.equity + finalDelta),
-            trades: [...r.trades, record],
+            equity: Math.max(0, r.equity + finalEquityDelta),
+            trades: [...r.trades, result.record],
             squares: r.squares.map((s, i) => i === r.currentSquareIndex ? { ...s, resolved: true } : s),
-            awaitingTradeDecision: false,
             activePerk: perkConsumed ? null : r.activePerk,
+            pendingTrade: null,
           },
         })
       },

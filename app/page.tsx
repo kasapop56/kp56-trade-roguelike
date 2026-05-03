@@ -10,13 +10,15 @@ import BiasPanel from '@/components/BiasPanel'
 import TradePanel from '@/components/TradePanel'
 import Scorecard from '@/components/Scorecard'
 import WisdomPanel from '@/components/WisdomPanel'
+import TradeResolution from '@/components/TradeResolution'
+import type { ChartProps } from '@/components/Chart'
 import type { TradeAction, SetupType, MysteryOutcome } from '@/store/gameStore'
 
 export default function GamePage() {
   const {
     run, stats, lastRunSummary,
     startRun, setBiasGuess, rollDice, selectLandingSquare,
-    selectPerk, dismissMysteryOutcome, decideTrade, endRun, dismissScorecard,
+    selectPerk, dismissMysteryOutcome, decideTrade, confirmTradeResult, endRun, dismissScorecard,
   } = useGameStore()
   const [starting, setStarting] = useState(false)
 
@@ -73,12 +75,27 @@ export default function GamePage() {
 
   const isRunOver = run.currentSquareIndex >= run.squares.length - 1
 
+  // Trade overlay for chart (after BUY/SELL → Continue)
+  const tradeOverlay: ChartProps['tradeOverlay'] = run.pendingTrade && run.pendingTrade.result.action !== 'skip'
+    ? {
+        action: run.pendingTrade.result.action as 'buy' | 'sell',
+        entryPrice: run.pendingTrade.result.entryPrice,
+        slPrice: run.pendingTrade.result.slPrice,
+        tpPrice: run.pendingTrade.result.tpPrice,
+        entryCandleIndex: run.pendingTrade.result.entryCandleIndex,
+        exitCandleIndex: run.pendingTrade.result.exitCandleIndex,
+        outcome: run.pendingTrade.result.outcome === 'skip' ? 'loss' : run.pendingTrade.result.outcome,
+        resolved: run.revealedCandleIndex > run.pendingTrade.result.exitCandleIndex,
+      }
+    : null
+
   // What the right sidebar should show right now
-  const showWisdom  = !!run.pendingWisdomChoices
-  const showMystery = !!run.pendingMysteryOutcome
-  const showTrade   = run.awaitingTradeDecision
-  const showDice    = !showTrade && !showWisdom && !showMystery && !isRunOver
-  const showBias    = showDice && run.diceValue === null
+  const showResolution = !!run.pendingTrade
+  const showWisdom     = !!run.pendingWisdomChoices && !showResolution
+  const showMystery    = !!run.pendingMysteryOutcome && !showResolution
+  const showTrade      = run.awaitingTradeDecision && !showResolution
+  const showDice       = !showTrade && !showWisdom && !showMystery && !showResolution && !isRunOver
+  const showBias       = showDice && run.diceValue === null
 
   return (
     <div className="min-h-screen bg-[#0d0d1a] text-white flex flex-col">
@@ -106,8 +123,9 @@ export default function GamePage() {
             candles={run.candles}
             revealedCount={run.revealedCandleIndex}
             warmupCount={50}
-            animating={run.awaitingTradeDecision}
-            animationSpeedMs={300}
+            animating={run.awaitingTradeDecision || !!run.pendingTrade}
+            animationSpeedMs={run.pendingTrade ? 180 : 300}
+            tradeOverlay={tradeOverlay}
             className="h-full"
           />
         </div>
@@ -127,6 +145,16 @@ export default function GamePage() {
           {/* Controls */}
           <div className="flex flex-col gap-4 p-4">
             <AnimatePresence mode="wait">
+
+              {/* Trade resolution (after BUY/SELL) */}
+              {showResolution && run.pendingTrade && (
+                <TradeResolution
+                  key="resolution"
+                  pending={run.pendingTrade}
+                  biasWasCorrect={!!lastBias?.correct}
+                  onContinue={confirmTradeResult}
+                />
+              )}
 
               {/* Wisdom perk selection */}
               {showWisdom && (

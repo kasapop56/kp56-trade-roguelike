@@ -3,11 +3,16 @@
 import { useEffect, useRef, useCallback } from 'react'
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type IPriceLine,
+  type ISeriesMarkersPluginApi,
   type CandlestickSeriesOptions,
   type CandlestickData,
+  type SeriesMarker,
   type Time,
   ColorType,
   CrosshairMode,
@@ -16,45 +21,58 @@ import type { Candle } from '@/store/gameStore'
 
 // ============ TYPES ============
 
+export type TradeOverlay = {
+  action: 'buy' | 'sell'
+  entryPrice: number
+  slPrice: number
+  tpPrice: number
+  entryCandleIndex: number
+  exitCandleIndex: number
+  outcome: 'win' | 'loss'
+  resolved: boolean       // true → show exit marker
+}
+
 export type ChartProps = {
   candles: Candle[]
-  revealedCount: number      // เผยถึงแท่งที่เท่าไหร่ (0-based, exclusive)
-  warmupCount?: number       // จำนวน warmup candles (แสดงทั้งหมด ไม่บังคับ reveal)
-  highlightFrom?: number     // index เริ่มต้น highlight (ช่องปัจจุบัน)
-  highlightTo?: number       // index สิ้นสุด highlight (ช่องปัจจุบัน)
-  animating?: boolean        // ถ้า true → animate reveal ทีละแท่ง
-  animationSpeedMs?: number  // ms ต่อแท่ง (default 300)
+  revealedCount: number
+  warmupCount?: number
+  animating?: boolean
+  animationSpeedMs?: number
+  tradeOverlay?: TradeOverlay | null
   className?: string
 }
 
 // ============ CONSTANTS ============
 
-const CHART_BG      = '#1a1a2e'   // dark navy
-const WICK_UP       = '#26a69a'   // teal
-const WICK_DOWN     = '#ef5350'   // red
-const BODY_UP       = '#26a69a'
-const BODY_DOWN     = '#ef5350'
-const GRID_COLOR    = '#2a2a3e'
-const TEXT_COLOR    = '#9e9e9e'
-const HIGHLIGHT_BG  = 'rgba(255, 200, 50, 0.08)'  // amber tint for current square
+const CHART_BG    = '#1a1a2e'
+const WICK_UP     = '#26a69a'
+const WICK_DOWN   = '#ef5350'
+const BODY_UP     = '#26a69a'
+const BODY_DOWN   = '#ef5350'
+const GRID_COLOR  = '#2a2a3e'
+const TEXT_COLOR  = '#9e9e9e'
+
+const ENTRY_COLOR = '#fbbf24'    // amber
+const SL_COLOR    = '#f43f5e'    // rose
+const TP_COLOR    = '#10b981'    // emerald
 
 // ============ COMPONENT ============
 
 export default function Chart({
   candles,
   revealedCount,
-  warmupCount = 50,
-  highlightFrom,
-  highlightTo,
   animating = false,
-  animationSpeedMs = 300,
+  animationSpeedMs = 200,
+  tradeOverlay,
   className = '',
 }: ChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef     = useRef<IChartApi | null>(null)
-  const seriesRef    = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const animTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const revealedRef  = useRef(revealedCount)
+  const containerRef  = useRef<HTMLDivElement>(null)
+  const chartRef      = useRef<IChartApi | null>(null)
+  const seriesRef     = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const animTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const revealedRef   = useRef(revealedCount)
+  const priceLinesRef = useRef<IPriceLine[]>([])
+  const markersRef    = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
 
   // Build chart on mount
   useEffect(() => {
@@ -82,16 +100,17 @@ export default function Chart({
     })
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor:          BODY_UP,
-      downColor:        BODY_DOWN,
-      borderUpColor:    WICK_UP,
-      borderDownColor:  WICK_DOWN,
-      wickUpColor:      WICK_UP,
-      wickDownColor:    WICK_DOWN,
+      upColor:         BODY_UP,
+      downColor:       BODY_DOWN,
+      borderUpColor:   WICK_UP,
+      borderDownColor: WICK_DOWN,
+      wickUpColor:     WICK_UP,
+      wickDownColor:   WICK_DOWN,
     } as Partial<CandlestickSeriesOptions>)
 
-    chartRef.current  = chart
-    seriesRef.current = series
+    chartRef.current   = chart
+    seriesRef.current  = series
+    markersRef.current = createSeriesMarkers(series, [])
 
     const ro = new ResizeObserver(() => {
       if (!containerRef.current) return
@@ -105,20 +124,21 @@ export default function Chart({
     return () => {
       ro.disconnect()
       chart.remove()
-      chartRef.current  = null
-      seriesRef.current = null
+      chartRef.current   = null
+      seriesRef.current  = null
+      markersRef.current = null
+      priceLinesRef.current = []
     }
   }, [])
 
-  // Update candle data when revealedCount changes
+  // Apply candle data
   const applyCandles = useCallback((count: number) => {
     if (!seriesRef.current || !candles.length) return
     const visible = candles.slice(0, count).map(toChartCandle)
     seriesRef.current.setData(visible)
-    chartRef.current?.timeScale().scrollToRealTime()
   }, [candles])
 
-  // Animate reveal
+  // Animate reveal: when revealedCount increases, walk forward one candle at a time
   useEffect(() => {
     if (animTimerRef.current) {
       clearInterval(animTimerRef.current)
@@ -131,7 +151,6 @@ export default function Chart({
       return
     }
 
-    // Animate from current revealed position to target
     const start  = revealedRef.current
     const target = revealedCount
     if (start >= target) {
@@ -156,32 +175,73 @@ export default function Chart({
     }
   }, [revealedCount, animating, animationSpeedMs, applyCandles])
 
-  // Highlight current square range
+  // Trade overlay: price lines + markers
   useEffect(() => {
-    const chart = chartRef.current
-    if (!chart || highlightFrom == null || highlightTo == null) return
-    if (!candles[highlightFrom] || !candles[highlightTo]) return
+    const series  = seriesRef.current
+    const markers = markersRef.current
+    if (!series || !markers) return
 
-    chart.applyOptions({
-      crosshair: {
-        vertLine: { style: 0 },
-      },
-    })
+    // Clear previous overlay
+    for (const line of priceLinesRef.current) series.removePriceLine(line)
+    priceLinesRef.current = []
+    markers.setMarkers([])
 
-    // lightweight-charts doesn't have native band highlight —
-    // mark via price line pair as a visual hint instead
-    const series = seriesRef.current
-    if (!series) return
+    if (!tradeOverlay) return
 
-    series.createPriceLine({
-      price: candles[highlightFrom]?.low ?? 0,
-      color: 'rgba(255, 200, 50, 0.3)',
+    const { action, entryPrice, slPrice, tpPrice, entryCandleIndex, exitCandleIndex, outcome, resolved } = tradeOverlay
+
+    // Entry / SL / TP price lines
+    priceLinesRef.current.push(series.createPriceLine({
+      price: entryPrice,
+      color: ENTRY_COLOR,
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
+      axisLabelVisible: true,
+      title: `Entry ${entryPrice.toFixed(2)}`,
+    }))
+    priceLinesRef.current.push(series.createPriceLine({
+      price: slPrice,
+      color: SL_COLOR,
       lineWidth: 1,
-      lineStyle: 2,
-      axisLabelVisible: false,
-      title: '▼ square start',
-    })
-  }, [highlightFrom, highlightTo, candles])
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: `SL ${slPrice.toFixed(2)}`,
+    }))
+    priceLinesRef.current.push(series.createPriceLine({
+      price: tpPrice,
+      color: TP_COLOR,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: `TP ${tpPrice.toFixed(2)}`,
+    }))
+
+    // Entry marker (at entry candle)
+    const entryCandle = candles[entryCandleIndex]
+    const exitCandle  = candles[exitCandleIndex]
+    if (!entryCandle) return
+
+    const newMarkers: SeriesMarker<Time>[] = [{
+      time: entryCandle.time as Time,
+      position: action === 'buy' ? 'belowBar' : 'aboveBar',
+      color: ENTRY_COLOR,
+      shape: action === 'buy' ? 'arrowUp' : 'arrowDown',
+      text: action.toUpperCase(),
+    }]
+
+    // Exit marker (only after resolved)
+    if (resolved && exitCandle) {
+      newMarkers.push({
+        time: exitCandle.time as Time,
+        position: outcome === 'win' ? 'aboveBar' : 'belowBar',
+        color: outcome === 'win' ? TP_COLOR : SL_COLOR,
+        shape: 'circle',
+        text: outcome === 'win' ? '✓ TP' : '✗ SL',
+      })
+    }
+
+    markers.setMarkers(newMarkers)
+  }, [tradeOverlay, candles])
 
   return (
     <div
