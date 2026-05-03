@@ -37,8 +37,8 @@ export default function GamePage() {
   }
 
   const handleTradeAction = useCallback(
-    (action: TradeAction, _setupGuess: SetupType | null) => {
-      decideTrade(action)
+    (action: TradeAction, setupGuess: SetupType | null) => {
+      decideTrade(action, setupGuess)
     },
     [decideTrade],
   )

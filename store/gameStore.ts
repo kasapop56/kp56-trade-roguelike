@@ -5,6 +5,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { generateBoard, createSeededRng } from '../lib/boardGenerator'
+import { simulateTrade } from '../lib/tradeSimulator'
+import { aggregateStats as mergeStats } from '../lib/statsAggregator'
 
 // ============ TYPES ============
 
@@ -92,7 +94,7 @@ type Store = {
   rollDice: () => void
   selectLandingSquare: (idx: number) => void
   guessSetup: (s: SetupType) => void
-  decideTrade: (a: TradeAction) => void
+  decideTrade: (a: TradeAction, setupGuess?: SetupType | null) => void
   endRun: () => void
   toggleSound: () => void
 }
@@ -171,13 +173,46 @@ export const useGameStore = create<Store>()(
         })
       },
 
-      guessSetup: (_s) => { /* TODO Phase 1.5 */ },
+      guessSetup: (_s) => { /* Phase 1.5 */ },
 
-      decideTrade: (_action) => { /* TODO: simulateTrade + apply equity */ },
+      decideTrade: (action, setupGuess = null) => {
+        const r = get().run; if (!r) return
+        const sq = r.squares[r.currentSquareIndex]
+        if (!sq) return
+
+        const lastBias = r.biasHistory.at(-1)
+
+        const { record, equityDelta } = simulateTrade({
+          action,
+          squareIndex: r.currentSquareIndex,
+          squareStartCandle: sq.candleStart,
+          squareEndCandle: sq.candleEnd,
+          allCandles: r.candles,
+          equity: r.equity,
+          riskFraction: RISK_PER_TRADE,
+          biasWasCorrect: lastBias?.correct ?? false,
+          biasDamageReduction: BIAS_DAMAGE_REDUCTION,
+          setupGuess,
+        })
+
+        const updatedSquares = r.squares.map((s, i) =>
+          i === r.currentSquareIndex ? { ...s, resolved: true } : s
+        )
+
+        set({
+          run: {
+            ...r,
+            equity: Math.max(0, r.equity + equityDelta),
+            trades: [...r.trades, record],
+            squares: updatedSquares,
+            awaitingTradeDecision: false,
+          },
+        })
+      },
 
       endRun: () => {
         const r = get().run; if (!r) return
-        set({ stats: aggregateStats(get().stats, r), run: null })
+        set({ stats: mergeStats(get().stats, r), run: null })
       },
 
       toggleSound: () => set((s) => ({
@@ -214,10 +249,6 @@ function resolveBias(r: Run) {
   }
 }
 
-function aggregateStats(prev: Stats, _r: Run): Stats {
-  // TODO: merge trades, bias accuracy, sessions, tilt index
-  return { ...prev, totalRuns: prev.totalRuns + 1 }
-}
 
 function emptyStats(): Stats {
   return {
