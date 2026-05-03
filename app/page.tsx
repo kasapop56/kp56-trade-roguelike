@@ -8,25 +8,31 @@ import Board from '@/components/Board'
 import Dice from '@/components/Dice'
 import BiasPanel from '@/components/BiasPanel'
 import TradePanel from '@/components/TradePanel'
-import type { TradeAction, SetupType } from '@/store/gameStore'
-
-// ============ COMPONENT ============
+import Scorecard from '@/components/Scorecard'
+import WisdomPanel from '@/components/WisdomPanel'
+import type { TradeAction, SetupType, MysteryOutcome } from '@/store/gameStore'
 
 export default function GamePage() {
-  const { run, stats, startRun, setBiasGuess, rollDice, selectLandingSquare, decideTrade, endRun } = useGameStore()
+  const {
+    run, stats, lastRunSummary,
+    startRun, setBiasGuess, rollDice, selectLandingSquare,
+    selectPerk, dismissMysteryOutcome, decideTrade, endRun, dismissScorecard,
+  } = useGameStore()
   const [starting, setStarting] = useState(false)
 
-  // Derive bias streak from history
+  // Bias streak (consecutive correct)
   const streak = run
-    ? [...run.biasHistory].reverse().findIndex((b) => !b.correct)
+    ? [...run.biasHistory].reverse().findIndex(b => !b.correct)
     : 0
-  const biasStreak = streak === -1 ? run?.biasHistory.filter((b) => b.correct).length ?? 0 : streak
+  const biasStreak = streak === -1
+    ? (run?.biasHistory.filter(b => b.correct).length ?? 0)
+    : streak
 
-  // Last bias result
   const lastBias = run?.biasHistory.at(-1)
-  const lastBiasResult: 'correct' | 'wrong' | null = lastBias ? (lastBias.correct ? 'correct' : 'wrong') : null
+  const lastBiasResult: 'correct' | 'wrong' | null = lastBias
+    ? (lastBias.correct ? 'correct' : 'wrong')
+    : null
 
-  // Bias damage reduction active if last bias was correct
   const biasDamageReduction = !!lastBias?.correct
 
   async function handleStart() {
@@ -43,24 +49,41 @@ export default function GamePage() {
     [decideTrade],
   )
 
-  // Variant C: build previewable squares with type info
-  const previewSquares = (run?.previewableSquares ?? []).map((idx) => ({
+  const previewSquares = (run?.previewableSquares ?? []).map(idx => ({
     index: idx,
     type: run!.squares[idx].type,
   }))
 
-  // ============ SCREENS ============
+  // ── Scorecard overlay (shown after endRun) ──────────────────────────────
+  if (lastRunSummary) {
+    return (
+      <div className="min-h-screen bg-[#0d0d1a]">
+        <Scorecard
+          summary={lastRunSummary}
+          onNewRun={() => { dismissScorecard(); handleStart() }}
+        />
+      </div>
+    )
+  }
 
+  // ── Start screen ─────────────────────────────────────────────────────────
   if (!run) {
     return <StartScreen onStart={handleStart} starting={starting} stats={stats} />
   }
 
   const isRunOver = run.currentSquareIndex >= run.squares.length - 1
 
+  // What the right sidebar should show right now
+  const showWisdom  = !!run.pendingWisdomChoices
+  const showMystery = !!run.pendingMysteryOutcome
+  const showTrade   = run.awaitingTradeDecision
+  const showDice    = !showTrade && !showWisdom && !showMystery && !isRunOver
+  const showBias    = showDice && run.diceValue === null
+
   return (
     <div className="min-h-screen bg-[#0d0d1a] text-white flex flex-col">
       {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-yellow-400 font-bold tracking-tight">TRADE ROGUELIKE</span>
           <span className="text-xs text-slate-500 hidden sm:inline">M5 · XAUUSD</span>
@@ -70,22 +93,14 @@ export default function GamePage() {
             Equity <span className="text-white font-mono">${run.equity.toFixed(0)}</span>
           </span>
           <span className="text-slate-400">
-            Square <span className="text-white">{run.currentSquareIndex + 1}/30</span>
+            Square <span className="text-white">{Math.max(0, run.currentSquareIndex + 1)}/30</span>
           </span>
-          {isRunOver && (
-            <button
-              onClick={endRun}
-              className="text-xs px-3 py-1 rounded-full bg-amber-600 hover:bg-amber-500 text-white transition-colors"
-            >
-              End Run
-            </button>
-          )}
         </div>
       </header>
 
-      {/* Main layout: chart left, controls right */}
+      {/* Main: chart + sidebar */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chart panel */}
+        {/* Chart */}
         <div className="flex-1 p-3 min-h-0">
           <Chart
             candles={run.candles}
@@ -97,8 +112,8 @@ export default function GamePage() {
           />
         </div>
 
-        {/* Right sidebar */}
-        <aside className="w-72 flex flex-col border-l border-slate-800 overflow-y-auto">
+        {/* Sidebar */}
+        <aside className="w-72 flex flex-col border-l border-slate-800 overflow-y-auto shrink-0">
           {/* Board */}
           <div className="relative p-3 border-b border-slate-800">
             <Board
@@ -111,35 +126,29 @@ export default function GamePage() {
 
           {/* Controls */}
           <div className="flex flex-col gap-4 p-4">
-            {/* Bias panel (always show unless awaiting trade) */}
-            {!run.awaitingTradeDecision && !isRunOver && (
-              <BiasPanel
-                pending={run.pendingBiasGuess}
-                streak={biasStreak}
-                lastResult={lastBiasResult}
-                disabled={run.diceValue !== null}
-                onGuess={setBiasGuess}
-              />
-            )}
+            <AnimatePresence mode="wait">
 
-            {/* Dice (show when not awaiting trade decision) */}
-            {!run.awaitingTradeDecision && !isRunOver && (
-              <Dice
-                value={run.diceValue}
-                previewableSquares={previewSquares}
-                disabled={false}
-                onRoll={rollDice}
-              />
-            )}
+              {/* Wisdom perk selection */}
+              {showWisdom && (
+                <motion.div key="wisdom" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <WisdomPanel
+                    choices={run.pendingWisdomChoices!}
+                    activePerk={run.activePerk}
+                    onSelect={selectPerk}
+                  />
+                </motion.div>
+              )}
 
-            {/* Trade panel */}
-            {run.awaitingTradeDecision && (
-              <AnimatePresence>
-                <motion.div
-                  key="trade-panel"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
+              {/* Mystery outcome */}
+              {showMystery && (
+                <motion.div key="mystery" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <MysteryResult outcome={run.pendingMysteryOutcome!} onDismiss={dismissMysteryOutcome} />
+                </motion.div>
+              )}
+
+              {/* Trade panel */}
+              {showTrade && (
+                <motion.div key="trade" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                   <TradePanel
                     equity={run.equity}
                     riskAmount={run.equity * 0.1}
@@ -147,24 +156,46 @@ export default function GamePage() {
                     onAction={handleTradeAction}
                   />
                 </motion.div>
-              </AnimatePresence>
-            )}
+              )}
 
-            {/* Run over */}
-            {isRunOver && (
-              <div className="text-center py-4">
-                <p className="text-lg font-bold text-yellow-400 mb-2">Run Complete!</p>
-                <p className="text-sm text-slate-400 mb-4">
-                  Final equity: <span className="text-white font-mono">${run.equity.toFixed(0)}</span>
-                </p>
-                <button
-                  onClick={endRun}
-                  className="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors"
-                >
-                  View Scorecard
-                </button>
-              </div>
-            )}
+              {/* Bias + Dice */}
+              {showDice && (
+                <motion.div key="dice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
+                  {showBias && (
+                    <BiasPanel
+                      pending={run.pendingBiasGuess}
+                      streak={biasStreak}
+                      lastResult={lastBiasResult}
+                      disabled={false}
+                      onGuess={setBiasGuess}
+                    />
+                  )}
+                  <Dice
+                    value={run.diceValue}
+                    previewableSquares={previewSquares}
+                    disabled={false}
+                    onRoll={rollDice}
+                  />
+                </motion.div>
+              )}
+
+              {/* Run over */}
+              {isRunOver && (
+                <motion.div key="end" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="text-center py-4">
+                  <p className="text-lg font-bold text-yellow-400 mb-2">Run Complete!</p>
+                  <p className="text-sm text-slate-400 mb-4">
+                    Final equity: <span className="text-white font-mono">${run.equity.toFixed(0)}</span>
+                  </p>
+                  <button
+                    onClick={endRun}
+                    className="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors"
+                  >
+                    View Scorecard
+                  </button>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
           </div>
         </aside>
       </div>
@@ -172,12 +203,43 @@ export default function GamePage() {
   )
 }
 
-// ============ START SCREEN ============
+// ─── Mystery result card ────────────────────────────────────────────────────
+
+function MysteryResult({
+  outcome,
+  onDismiss,
+}: {
+  outcome: MysteryOutcome | null
+  onDismiss: () => void
+}) {
+  if (!outcome) return null
+  const isGain = outcome.direction === 'gain'
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-slate-400 uppercase tracking-widest">Mystery Square</p>
+      <div className={`rounded-xl border-2 p-4 text-center ${isGain ? 'border-teal-600 bg-teal-900/20' : 'border-rose-700 bg-rose-900/20'}`}>
+        <p className="text-3xl mb-2">{isGain ? '🎉' : '💀'}</p>
+        <p className={`text-xl font-bold font-mono ${isGain ? 'text-teal-300' : 'text-rose-400'}`}>
+          {isGain ? '+' : '-'}{outcome.rMultiple}R
+        </p>
+        <p className="text-sm text-slate-400 mt-1">
+          {isGain ? 'Lucky flip!' : 'Unlucky flip'}
+        </p>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="w-full py-2 rounded-lg border border-slate-700 hover:border-slate-500 text-slate-300 text-sm transition-colors"
+      >
+        Continue
+      </button>
+    </div>
+  )
+}
+
+// ─── Start screen ───────────────────────────────────────────────────────────
 
 function StartScreen({
-  onStart,
-  starting,
-  stats,
+  onStart, starting, stats,
 }: {
   onStart: () => void
   starting: boolean
@@ -191,16 +253,16 @@ function StartScreen({
       </div>
 
       {stats.totalRuns > 0 && (
-        <div className="flex gap-6 text-center text-sm">
+        <div className="flex gap-8 text-center">
           <div>
             <p className="text-2xl font-bold text-white">{stats.totalRuns}</p>
-            <p className="text-slate-500">Runs</p>
+            <p className="text-slate-500 text-sm">Runs</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-white">
               {(stats.avgBiasAccuracy * 100).toFixed(0)}%
             </p>
-            <p className="text-slate-500">Bias Accuracy</p>
+            <p className="text-slate-500 text-sm">Bias Accuracy</p>
           </div>
         </div>
       )}

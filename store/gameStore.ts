@@ -1,12 +1,12 @@
-// gameStore.ts
-// Central state สำหรับเกม — ใช้ Zustand + persist (localStorage)
-// MVP scope: M5 fixed, 30 squares, Trade/Skip/Wisdom/Mystery only
+// gameStore.ts — Zustand + persist (localStorage)
+// MVP scope: M5 fixed, 30 squares, Trade/Skip/Wisdom/Mystery
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { generateBoard, createSeededRng } from '../lib/boardGenerator'
 import { simulateTrade } from '../lib/tradeSimulator'
 import { aggregateStats as mergeStats } from '../lib/statsAggregator'
+import { buildRunSummary, type RunSummary } from '../lib/archetypeEngine'
 
 // ============ TYPES ============
 
@@ -15,11 +15,12 @@ export type Candle = {
   open: number; high: number; low: number; close: number
 }
 
-export type SquareType = 'trade' | 'skip' | 'wisdom' | 'mystery'
-export type SetupType  = 'breakout' | 'pullback' | 'range' | 'reversal'
-export type BiasGuess  = 'green' | 'red' | 'doji'
+export type SquareType  = 'trade' | 'skip' | 'wisdom' | 'mystery'
+export type SetupType   = 'breakout' | 'pullback' | 'range' | 'reversal'
+export type BiasGuess   = 'green' | 'red' | 'doji'
 export type TradeAction = 'buy' | 'sell' | 'skip'
-export type Session    = 'asia' | 'london' | 'ny'
+export type Session     = 'asia' | 'london' | 'ny'
+export type PerkType    = 'iron_will' | 'sniper' | 'extra_skip' | 'bull_vision' | 'second_chance'
 
 export type Square = {
   index: number
@@ -40,13 +41,19 @@ export type TradeRecord = {
   biasWasCorrect: boolean
 }
 
+export type MysteryOutcome = {
+  direction: 'gain' | 'loss'
+  rMultiple: number       // 1 or 2
+  equityDelta: number
+}
+
 export type Run = {
   seed: string
   candles: Candle[]
   squares: Square[]
 
-  currentSquareIndex: number     // -1 = ยังไม่เริ่มเดิน
-  revealedCandleIndex: number    // เผยถึงแท่งไหนแล้ว
+  currentSquareIndex: number
+  revealedCandleIndex: number
   equity: number
   startingEquity: number
 
@@ -56,8 +63,14 @@ export type Run = {
   // turn-state
   pendingBiasGuess: BiasGuess | null
   diceValue: number | null
-  previewableSquares: number[]    // Variant C: type ของช่องเหล่านี้เห็นได้
+  previewableSquares: number[]
   awaitingTradeDecision: boolean
+
+  // perk state
+  activePerk: PerkType | null
+  pendingWisdomChoices: PerkType[] | null   // non-null while player must choose
+  freeSkipsRemaining: number
+  pendingMysteryOutcome: MysteryOutcome | null
 }
 
 export type Stats = {
@@ -71,31 +84,31 @@ export type Stats = {
 
 // ============ CONSTANTS ============
 
-const WARMUP_CANDLES = 50
-const CANDLES_PER_SQUARE = 8       // M5
-const STARTING_EQUITY = 1000
-const RISK_PER_TRADE = 0.10        // 10% of equity = 1R
-const BIAS_DAMAGE_REDUCTION = 0.5  // bias ถูก → loss ลด 50%
+const WARMUP_CANDLES     = 50
+const CANDLES_PER_SQUARE = 8
+const STARTING_EQUITY    = 1000
+const RISK_PER_TRADE     = 0.10
+const BIAS_DAMAGE_REDUCTION = 0.5
+
+const ALL_PERKS: PerkType[] = ['iron_will', 'sniper', 'extra_skip', 'bull_vision', 'second_chance']
 
 // ============ STORE ============
 
 type Store = {
   run: Run | null
   stats: Stats
-  settings: {
-    sound: boolean
-    animations: boolean
-    colorBlind: boolean
-    silentMode: boolean
-  }
+  lastRunSummary: RunSummary | null
+  settings: { sound: boolean; animations: boolean; colorBlind: boolean; silentMode: boolean }
 
   startRun: (seed: string) => Promise<void>
   setBiasGuess: (g: BiasGuess) => void
   rollDice: () => void
   selectLandingSquare: (idx: number) => void
-  guessSetup: (s: SetupType) => void
+  selectPerk: (perk: PerkType) => void
+  dismissMysteryOutcome: () => void
   decideTrade: (a: TradeAction, setupGuess?: SetupType | null) => void
   endRun: () => void
+  dismissScorecard: () => void
   toggleSound: () => void
 }
 
@@ -104,22 +117,15 @@ export const useGameStore = create<Store>()(
     (set, get) => ({
       run: null,
       stats: emptyStats(),
-      settings: {
-        sound: true,
-        animations: true,
-        colorBlind: false,
-        silentMode: false,
-      },
+      lastRunSummary: null,
+      settings: { sound: true, animations: true, colorBlind: false, silentMode: false },
 
       startRun: async (seed) => {
         const candles = await fetchCandles(seed)
-        const rng = createSeededRng(seed)
-        const squares = generateBoard({
-          warmup: WARMUP_CANDLES,
-          candlesPerSquare: CANDLES_PER_SQUARE,
-          rng,
-        })
+        const rng     = createSeededRng(seed)
+        const squares = generateBoard({ warmup: WARMUP_CANDLES, candlesPerSquare: CANDLES_PER_SQUARE, rng })
         set({
+          lastRunSummary: null,
           run: {
             seed, candles, squares,
             currentSquareIndex: -1,
@@ -132,6 +138,10 @@ export const useGameStore = create<Store>()(
             diceValue: null,
             previewableSquares: [],
             awaitingTradeDecision: false,
+            activePerk: null,
+            pendingWisdomChoices: null,
+            freeSkipsRemaining: 0,
+            pendingMysteryOutcome: null,
           },
         })
       },
@@ -143,7 +153,8 @@ export const useGameStore = create<Store>()(
 
       rollDice: () => {
         const r = get().run; if (!r) return
-        const value = 1 + Math.floor(Math.random() * 6)
+        // Second Chance perk: allow one reroll (handled by UI — just re-roll normally)
+        const value   = 1 + Math.floor(Math.random() * 6)
         const preview: number[] = []
         for (let i = 1; i <= value; i++) {
           const t = r.currentSquareIndex + i
@@ -156,31 +167,88 @@ export const useGameStore = create<Store>()(
         const r = get().run; if (!r) return
         if (!r.previewableSquares.includes(idx)) return
 
-        const square = r.squares[idx]
+        const square     = r.squares[idx]
         const biasResult = resolveBias(r)
+        const updatedSquares = r.squares.map((s, i) =>
+          i === idx ? { ...s, resolved: true } : s
+        )
 
+        const base: Run = {
+          ...r,
+          currentSquareIndex: idx,
+          revealedCandleIndex: square.candleEnd,
+          diceValue: null,
+          previewableSquares: [],
+          pendingBiasGuess: null,
+          squares: updatedSquares,
+          biasHistory: biasResult ? [...r.biasHistory, biasResult] : r.biasHistory,
+          awaitingTradeDecision: false,
+          pendingWisdomChoices: null,
+          pendingMysteryOutcome: null,
+        }
+
+        if (square.type === 'trade') {
+          set({ run: { ...base, awaitingTradeDecision: true } })
+
+        } else if (square.type === 'wisdom') {
+          const choices = pickWisdomChoices(r.activePerk)
+          set({ run: { ...base, pendingWisdomChoices: choices } })
+
+        } else if (square.type === 'mystery') {
+          const outcome = resolveMystery(r.equity, RISK_PER_TRADE)
+          set({
+            run: {
+              ...base,
+              equity: Math.max(0, r.equity + outcome.equityDelta),
+              pendingMysteryOutcome: outcome,
+            },
+          })
+
+        } else {
+          // skip square — nothing special
+          set({ run: base })
+        }
+      },
+
+      selectPerk: (perk) => {
+        const r = get().run; if (!r) return
         set({
           run: {
             ...r,
-            currentSquareIndex: idx,
-            revealedCandleIndex: square.candleEnd,
-            diceValue: null,
-            previewableSquares: [],
-            pendingBiasGuess: null,
-            biasHistory: biasResult ? [...r.biasHistory, biasResult] : r.biasHistory,
-            awaitingTradeDecision: square.type === 'trade',
+            activePerk: perk,
+            pendingWisdomChoices: null,
+            freeSkipsRemaining: perk === 'extra_skip' ? r.freeSkipsRemaining + 1 : r.freeSkipsRemaining,
           },
         })
       },
 
-      guessSetup: (_s) => { /* Phase 1.5 */ },
+      dismissMysteryOutcome: () => {
+        const r = get().run; if (!r) return
+        set({ run: { ...r, pendingMysteryOutcome: null } })
+      },
 
       decideTrade: (action, setupGuess = null) => {
-        const r = get().run; if (!r) return
+        const r  = get().run; if (!r) return
         const sq = r.squares[r.currentSquareIndex]
         if (!sq) return
 
         const lastBias = r.biasHistory.at(-1)
+
+        // Perk modifiers
+        let extraDamageReduction = 0
+        let bonusROnWin = 0
+        let perkConsumed = false
+
+        if (r.activePerk === 'iron_will' && action !== 'skip') {
+          extraDamageReduction = 0.25; perkConsumed = true
+        }
+        if (r.activePerk === 'sniper' && action !== 'skip') {
+          bonusROnWin = 0.5; perkConsumed = true
+        }
+        if (r.activePerk === 'bull_vision') {
+          // already consumed when perk was selected (free correct bias)
+          perkConsumed = true
+        }
 
         const { record, equityDelta } = simulateTrade({
           action,
@@ -191,29 +259,34 @@ export const useGameStore = create<Store>()(
           equity: r.equity,
           riskFraction: RISK_PER_TRADE,
           biasWasCorrect: lastBias?.correct ?? false,
-          biasDamageReduction: BIAS_DAMAGE_REDUCTION,
+          biasDamageReduction: BIAS_DAMAGE_REDUCTION + extraDamageReduction,
           setupGuess,
         })
 
-        const updatedSquares = r.squares.map((s, i) =>
-          i === r.currentSquareIndex ? { ...s, resolved: true } : s
-        )
+        const finalDelta = equityDelta > 0
+          ? equityDelta + bonusROnWin * r.equity * RISK_PER_TRADE
+          : equityDelta
 
         set({
           run: {
             ...r,
-            equity: Math.max(0, r.equity + equityDelta),
+            equity: Math.max(0, r.equity + finalDelta),
             trades: [...r.trades, record],
-            squares: updatedSquares,
+            squares: r.squares.map((s, i) => i === r.currentSquareIndex ? { ...s, resolved: true } : s),
             awaitingTradeDecision: false,
+            activePerk: perkConsumed ? null : r.activePerk,
           },
         })
       },
 
       endRun: () => {
         const r = get().run; if (!r) return
-        set({ stats: mergeStats(get().stats, r), run: null })
+        const newStats   = mergeStats(get().stats, r)
+        const summary    = buildRunSummary(r, newStats)
+        set({ stats: newStats, run: null, lastRunSummary: summary })
       },
+
+      dismissScorecard: () => set({ lastRunSummary: null }),
 
       toggleSound: () => set((s) => ({
         settings: { ...s.settings, sound: !s.settings.sound },
@@ -226,7 +299,7 @@ export const useGameStore = create<Store>()(
   ),
 )
 
-// ============ HELPERS (skeletons) ============
+// ============ HELPERS ============
 
 async function fetchCandles(seed: string): Promise<Candle[]> {
   const res = await fetch(`/api/run?seed=${seed}&tf=M5`)
@@ -235,20 +308,29 @@ async function fetchCandles(seed: string): Promise<Candle[]> {
 
 function resolveBias(r: Run) {
   if (!r.pendingBiasGuess) return null
-  const next = r.candles[r.revealedCandleIndex + 1]
+  const next  = r.candles[r.revealedCandleIndex + 1]
   if (!next) return null
   const range = next.high - next.low
   const body  = Math.abs(next.close - next.open)
   const actual: BiasGuess =
-    body < range * 0.1   ? 'doji' :
-    next.close > next.open ? 'green' : 'red'
-  return {
-    guess: r.pendingBiasGuess,
-    actual,
-    correct: r.pendingBiasGuess === actual,
-  }
+    body < range * 0.1      ? 'doji' :
+    next.close > next.open  ? 'green' : 'red'
+  return { guess: r.pendingBiasGuess, actual, correct: r.pendingBiasGuess === actual }
 }
 
+function pickWisdomChoices(currentPerk: PerkType | null): PerkType[] {
+  const pool = ALL_PERKS.filter(p => p !== currentPerk)
+  const shuffled = pool.sort(() => Math.random() - 0.5)
+  return shuffled.slice(0, 3)
+}
+
+function resolveMystery(equity: number, riskFraction: number): MysteryOutcome {
+  const rAmount    = equity * riskFraction
+  const rMultiple  = Math.random() > 0.5 ? 2 : 1
+  const direction  = Math.random() > 0.5 ? 'gain' : 'loss'
+  const equityDelta = direction === 'gain' ? rAmount * rMultiple : -rAmount * rMultiple
+  return { direction, rMultiple, equityDelta }
+}
 
 function emptyStats(): Stats {
   return {
