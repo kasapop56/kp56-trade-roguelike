@@ -102,8 +102,14 @@ export default function Dice({ value, previewableSquares, disabled = false, onRo
       </motion.button>
 
       {/* Roll label */}
-      <p className="text-xs text-slate-500">
-        {rolling ? 'Rolling…' : value !== null ? `Rolled ${value}` : 'Tap to roll'}
+      <p className="text-xs text-slate-500 text-center">
+        {rolling
+          ? 'Rolling…'
+          : value !== null
+            ? `Rolled ${value} — pick a square below`
+            : disabled
+              ? 'Predict bias first ↑'
+              : 'Tap to roll d6'}
       </p>
 
       {/* Variant C: type preview for reachable squares */}

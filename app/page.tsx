@@ -201,7 +201,7 @@ export default function GamePage() {
                   <Dice
                     value={run.diceValue}
                     previewableSquares={previewSquares}
-                    disabled={false}
+                    disabled={run.pendingBiasGuess === null && run.diceValue === null}
                     onRoll={rollDice}
                   />
                 </motion.div>

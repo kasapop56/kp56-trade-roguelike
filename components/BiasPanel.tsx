@@ -50,8 +50,13 @@ export default function BiasPanel({ pending, streak, lastResult, disabled = fals
         <StreakBadge streak={streak} />
       </div>
 
-      {/* Prompt */}
-      <p className="text-sm text-slate-300">Next candle direction?</p>
+      {/* Prompt + help */}
+      <div className="flex flex-col gap-1">
+        <p className="text-sm text-slate-300 font-medium">Will the next candle close green, red, or doji?</p>
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          Required before rolling. Get it right → next losing trade takes only -50% damage. Wrong has no penalty.
+        </p>
+      </div>
 
       {/* Buttons */}
       <div className="flex gap-2">
@@ -96,10 +101,6 @@ export default function BiasPanel({ pending, streak, lastResult, disabled = fals
         )}
       </AnimatePresence>
 
-      {/* Skip note */}
-      {!pending && !disabled && (
-        <p className="text-[11px] text-slate-600 text-center">Optional — skip to roll directly</p>
-      )}
     </div>
   )
 }

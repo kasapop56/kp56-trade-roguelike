@@ -57,6 +57,11 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
         )}
       </div>
 
+      {/* Help text */}
+      <p className="text-[11px] text-slate-500 leading-relaxed">
+        Read the chart and decide. SL/TP auto-set at 1.5×ATR (1:1 R:R). SKIP keeps you safe but earns nothing.
+      </p>
+
       {/* Equity + risk info */}
       <div className="flex gap-3 text-xs">
         <div className="flex-1 rounded-lg bg-slate-800/50 border border-slate-700 px-3 py-2">
