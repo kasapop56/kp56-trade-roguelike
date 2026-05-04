@@ -12,9 +12,13 @@ import Scorecard from '@/components/Scorecard'
 import WisdomPanel from '@/components/WisdomPanel'
 import TradeResolution from '@/components/TradeResolution'
 import type { ChartProps } from '@/components/Chart'
-import type { TradeAction, SetupType, MysteryOutcome } from '@/store/gameStore'
+import type { TradeAction, SetupType, MysteryOutcome, PerkType } from '@/store/gameStore'
 import { useT } from '@/lib/useT'
 import type { Language } from '@/lib/i18n'
+
+const PERK_ICON: Record<PerkType, string> = {
+  iron_will: '🛡', sniper: '🎯', extra_skip: '⏸', bull_vision: '👁', second_chance: '🎲',
+}
 
 export default function GamePage() {
   const {
@@ -159,6 +163,11 @@ export default function GamePage() {
             />
           </div>
 
+          {/* Active perk persistent indicator */}
+          {run.activePerk && !showResolution && !showWisdom && (
+            <ActivePerkBadge perk={run.activePerk} />
+          )}
+
           {/* Controls */}
           <div className="flex flex-col gap-4 p-4">
             <AnimatePresence mode="wait">
@@ -220,6 +229,7 @@ export default function GamePage() {
                     previewableSquares={previewSquares}
                     disabled={run.pendingBiasGuess === null && run.diceValue === null}
                     onRoll={rollDice}
+                    onSelectSquare={selectLandingSquare}
                   />
                 </motion.div>
               )}
@@ -278,6 +288,21 @@ function MysteryResult({
       >
         {t('mystery.continue')}
       </button>
+    </div>
+  )
+}
+
+// ─── Active perk badge ─────────────────────────────────────────────────────
+
+function ActivePerkBadge({ perk }: { perk: PerkType }) {
+  const { t } = useT()
+  return (
+    <div className="mx-3 mb-3 px-3 py-2 rounded-lg bg-violet-900/25 border border-violet-700/60 flex items-center gap-2">
+      <span className="text-base">{PERK_ICON[perk]}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] text-violet-400 uppercase tracking-widest leading-none">{t('wisdom.active')}</p>
+        <p className="text-sm text-violet-100 font-medium truncate">{t(`perk.${perk}`)}</p>
+      </div>
     </div>
   )
 }

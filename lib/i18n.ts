@@ -34,7 +34,7 @@ const EN: Dict = {
 
   // Dice
   'dice.rolling':         'Rolling…',
-  'dice.rolled':          'Rolled {n} — pick a square below',
+  'dice.rolled':          'Rolled {n} — tap a highlighted square',
   'dice.blocked':         'Predict bias first ↑',
   'dice.idle':            'Tap to roll d6',
   'dice.chooseSquare':    'Choose square',
@@ -171,7 +171,7 @@ const TH: Dict = {
   'bias.streak':          '{n} ติด',
 
   'dice.rolling':         'กำลังทอย…',
-  'dice.rolled':          'ทอยได้ {n} — เลือกช่องด้านล่าง',
+  'dice.rolled':          'ทอยได้ {n} — แตะช่องที่กระพริบ',
   'dice.blocked':         'ทำนาย bias ก่อน ↑',
   'dice.idle':            'แตะเพื่อทอยลูกเต๋า',
   'dice.chooseSquare':    'เลือกช่อง',

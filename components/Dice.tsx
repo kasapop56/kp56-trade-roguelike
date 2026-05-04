@@ -15,6 +15,7 @@ export type DiceProps = {
   }[]
   disabled?: boolean
   onRoll: () => void
+  onSelectSquare?: (idx: number) => void
 }
 
 // ============ CONFIG ============
@@ -41,7 +42,7 @@ const TYPE_ICONS: Record<SquareType, string> = {
 
 // ============ COMPONENT ============
 
-export default function Dice({ value, previewableSquares, disabled = false, onRoll }: DiceProps) {
+export default function Dice({ value, previewableSquares, disabled = false, onRoll, onSelectSquare }: DiceProps) {
   const [rolling, setRolling] = useState(false)
   const { t } = useT()
 
@@ -127,7 +128,12 @@ export default function Dice({ value, previewableSquares, disabled = false, onRo
             <p className="text-xs text-slate-400 uppercase tracking-widest">{t('dice.chooseSquare')}</p>
             <div className="flex gap-2 flex-wrap justify-center">
               {previewableSquares.map(({ index, type }) => (
-                <SquarePreviewChip key={index} squareIndex={index} type={type} />
+                <SquarePreviewChip
+                  key={index}
+                  squareIndex={index}
+                  type={type}
+                  onClick={onSelectSquare ? () => onSelectSquare(index) : undefined}
+                />
               ))}
             </div>
           </motion.div>
@@ -160,11 +166,28 @@ function DiceFace({ value }: { value: number }) {
   )
 }
 
-function SquarePreviewChip({ squareIndex, type }: { squareIndex: number; type: SquareType }) {
+function SquarePreviewChip({
+  squareIndex, type, onClick,
+}: {
+  squareIndex: number
+  type: SquareType
+  onClick?: () => void
+}) {
+  const Tag = onClick ? motion.button : 'div'
+  const interactiveProps = onClick
+    ? { whileHover: { scale: 1.08 }, whileTap: { scale: 0.94 }, onClick }
+    : {}
   return (
-    <div className={`flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-medium ${TYPE_COLORS[type]}`}>
-      <span>{TYPE_ICONS[type]}</span>
+    <Tag
+      {...interactiveProps}
+      className={[
+        'flex items-center gap-1 px-2.5 py-1.5 rounded-md border-2 text-xs font-medium transition-all',
+        TYPE_COLORS[type],
+        onClick ? 'cursor-pointer hover:brightness-125 ring-2 ring-yellow-400/30 animate-pulse' : '',
+      ].join(' ')}
+    >
+      <span className="text-sm">{TYPE_ICONS[type]}</span>
       <span>#{squareIndex + 1}</span>
-    </div>
+    </Tag>
   )
 }
