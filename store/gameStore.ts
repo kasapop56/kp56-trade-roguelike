@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { generateBoard, createSeededRng } from '../lib/boardGenerator'
-import { simulateTrade, type SimulateTradeResult } from '../lib/tradeSimulator'
+import { simulateTrade, type SimulateTradeResult, type SetupProbabilities } from '../lib/tradeSimulator'
 import { aggregateStats as mergeStats } from '../lib/statsAggregator'
 import { buildRunSummary, type RunSummary } from '../lib/archetypeEngine'
 import type { Language } from '../lib/i18n'
@@ -37,6 +37,7 @@ export type TradeRecord = {
   setupActual: SetupType
   setupReason: string
   setupHasSignal: boolean
+  setupProbs: SetupProbabilities
   action: TradeAction
   outcome: 'win' | 'loss' | 'skip'
   rMultiple: number

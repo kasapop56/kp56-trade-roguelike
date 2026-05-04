@@ -48,6 +48,7 @@ export function simulateTrade(input: SimulateTradeInput): SimulateTradeResult {
         setupActual: setupClass.type,
         setupReason: setupClass.reason,
         setupHasSignal: setupClass.hasSignal,
+        setupProbs: setupClass.probs,
         action: 'skip',
         outcome: 'skip',
         rMultiple: 0,
@@ -108,6 +109,7 @@ export function simulateTrade(input: SimulateTradeInput): SimulateTradeResult {
       setupActual: setupClass.type,
       setupReason: setupClass.reason,
       setupHasSignal: setupClass.hasSignal,
+      setupProbs: setupClass.probs,
       action,
       outcome,
       rMultiple: outcome === 'win' ? 1 : biasWasCorrect ? -(1 - biasDamageReduction) : -1,
@@ -141,22 +143,42 @@ function calcATR(candles: Candle[], endIdx: number, period: number): number {
   return trs.reduce((a, b) => a + b, 0) / trs.length
 }
 
-type SetupClassification = {
-  type: SetupType
-  reason: string   // Thai — primary language
-  reasonEn: string // English fallback
-  hasSignal: boolean
+export type SetupProbabilities = {
+  with_trend: number
+  counter:    number
+  structure:  number
+  instinct:   number
 }
 
-function classifySetupFull(candles: Candle[], startIdx: number): SetupClassification {
-  const lookback = candles.slice(Math.max(0, startIdx - 20), startIdx)
+type SetupClassification = {
+  type: SetupType
+  reason: string
+  reasonEn: string
+  hasSignal: boolean
+  probs: SetupProbabilities
+}
 
+type SetupSignals = {
+  breakHigh: boolean
+  breakLow: boolean
+  consecutive: number
+  lastDir: 1 | -1
+  overallChange: number
+  recentMove: number
+  hasEnoughData: boolean
+  trendScore: number
+  counterScore: number
+  structureScore: number
+}
+
+function analyzeSignals(candles: Candle[], startIdx: number): SetupSignals {
+  const lookback = candles.slice(Math.max(0, startIdx - 20), startIdx)
   if (lookback.length < 8) {
     return {
-      type: 'instinct',
-      reason: 'ข้อมูลไม่พอวิเคราะห์',
-      reasonEn: 'Insufficient data',
-      hasSignal: false,
+      breakHigh: false, breakLow: false, consecutive: 0,
+      lastDir: 1, overallChange: 0, recentMove: 0,
+      hasEnoughData: false,
+      trendScore: 0, counterScore: 0, structureScore: 0,
     }
   }
 
@@ -171,88 +193,143 @@ function classifySetupFull(candles: Candle[], startIdx: number): SetupClassifica
   const recentHigh = Math.max(...highs.slice(mid))
   const recentLow  = Math.min(...lows.slice(mid))
 
-  const firstClose = closes[0]
-  const lastClose  = closes[n - 1]
+  const firstClose    = closes[0]
+  const lastClose     = closes[n - 1]
   const overallChange = (lastClose - firstClose) / firstClose
 
-  // Consecutive same-direction closes in last 5 bars
-  const lastDir = closes[n - 1] > closes[n - 2] ? 1 : -1
+  const lastDir: 1 | -1 = closes[n - 1] > closes[n - 2] ? 1 : -1
   let consecutive = 1
   for (let i = n - 2; i >= Math.max(1, n - 6); i--) {
     if ((closes[i] > closes[i - 1] ? 1 : -1) === lastDir) consecutive++
     else break
   }
 
-  // 8-bar recent move
   const recentMoveStart = closes[Math.max(0, n - 9)]
   const recentMove = (lastClose - recentMoveStart) / recentMoveStart
 
   const breakHigh = recentHigh > prevHigh * 1.001
   const breakLow  = recentLow  < prevLow  * 0.999
 
-  // Score
-  let structureScore = breakHigh || breakLow ? 3 : 0
-  let trendScore     = (Math.abs(overallChange) > 0.002 ? 2 : 0) + (consecutive >= 3 ? 2 : 0)
-  let counterScore   = (Math.abs(recentMove) > 0.003 ? 2 : 0) + (Math.abs(recentMove) > 0.005 ? 1 : 0)
-
-  // Counter only makes sense when opposite to overall trend
+  const structureScore = breakHigh || breakLow ? 3 : 0
+  const trendScore = (Math.abs(overallChange) > 0.002 ? 2 : 0) + (consecutive >= 3 ? 2 : 0)
+  let counterScore = (Math.abs(recentMove) > 0.003 ? 2 : 0) + (Math.abs(recentMove) > 0.005 ? 1 : 0)
+  // Counter only makes sense if recent move is opposite to overall trend
   if (Math.sign(recentMove) === Math.sign(overallChange)) counterScore = Math.max(0, counterScore - 1)
 
-  const maxScore = Math.max(structureScore, trendScore, counterScore)
+  return {
+    breakHigh, breakLow, consecutive, lastDir,
+    overallChange, recentMove,
+    hasEnoughData: true,
+    trendScore, counterScore, structureScore,
+  }
+}
 
-  if (maxScore < 2) {
+export function getSetupProbabilities(candles: Candle[], startIdx: number): SetupProbabilities {
+  const s = analyzeSignals(candles, startIdx)
+  if (!s.hasEnoughData) {
+    return { with_trend: 0, counter: 0, structure: 0, instinct: 1 }
+  }
+
+  const sumRaw = s.trendScore + s.counterScore + s.structureScore
+  if (sumRaw === 0) {
+    return { with_trend: 0, counter: 0, structure: 0, instinct: 1 }
+  }
+
+  const sortedDesc = [s.trendScore, s.counterScore, s.structureScore].sort((a, b) => b - a)
+  const maxRaw    = sortedDesc[0]
+  const secondRaw = sortedDesc[1]
+
+  // Confidence = how strong overall × how clearly one signal stands out
+  const overallStrength = Math.min(1, sumRaw / 6)
+  const clarity         = sumRaw > 0 ? (maxRaw - secondRaw) / sumRaw : 0
+  const confidence      = overallStrength * (0.5 + 0.5 * clarity)
+
+  return {
+    with_trend: (s.trendScore     / sumRaw) * confidence,
+    counter:    (s.counterScore   / sumRaw) * confidence,
+    structure:  (s.structureScore / sumRaw) * confidence,
+    instinct:   1 - confidence,
+  }
+}
+
+function classifySetupFull(candles: Candle[], startIdx: number): SetupClassification {
+  const s     = analyzeSignals(candles, startIdx)
+  const probs = getSetupProbabilities(candles, startIdx)
+
+  if (!s.hasEnoughData) {
     return {
       type: 'instinct',
-      reason: 'ไม่มีสัญญาณที่ชัดเจน — entry นี้คือการเดา',
-      reasonEn: 'No clear signal — this entry is a bet',
+      reason: 'ข้อมูลไม่พอวิเคราะห์',
+      reasonEn: 'Insufficient data',
       hasSignal: false,
+      probs,
     }
   }
 
-  if (structureScore === maxScore) {
-    if (breakHigh) return {
+  // Pick winner from probabilities — instinct wins if it's highest
+  const entries = Object.entries(probs) as Array<[SetupType, number]>
+  entries.sort((a, b) => b[1] - a[1])
+  const [topType] = entries[0]
+
+  if (topType === 'instinct') {
+    return {
+      type: 'instinct',
+      reason: 'สัญญาณ 3 แบบใกล้เคียงกันหมด — ไม่มีอันไหนโดดเด่น',
+      reasonEn: 'All 3 signals are too close — no clear edge',
+      hasSignal: false,
+      probs,
+    }
+  }
+
+  if (topType === 'structure') {
+    if (s.breakHigh) return {
       type: 'structure',
       reason: 'ราคาทะลุแนวต้านสูงสุดของ 20 แท่งล่าสุด',
       reasonEn: 'Price broke above the 20-bar resistance high',
       hasSignal: true,
+      probs,
     }
     return {
       type: 'structure',
       reason: 'ราคาทะลุแนวรับต่ำสุดของ 20 แท่งล่าสุด',
       reasonEn: 'Price broke below the 20-bar support low',
       hasSignal: true,
+      probs,
     }
   }
 
-  if (trendScore === maxScore) {
-    if (consecutive >= 3) {
-      const dirTh = lastDir > 0 ? 'ขึ้น' : 'ลง'
-      const dirEn = lastDir > 0 ? 'up' : 'down'
+  if (topType === 'with_trend') {
+    if (s.consecutive >= 3) {
+      const dirTh = s.lastDir > 0 ? 'ขึ้น' : 'ลง'
+      const dirEn = s.lastDir > 0 ? 'up' : 'down'
       return {
         type: 'with_trend',
-        reason: `ราคาวิ่ง${dirTh}ต่อเนื่อง ${consecutive} แท่ง`,
-        reasonEn: `${consecutive} consecutive ${dirEn} bars`,
+        reason: `ราคาวิ่ง${dirTh}ต่อเนื่อง ${s.consecutive} แท่ง`,
+        reasonEn: `${s.consecutive} consecutive ${dirEn} bars`,
         hasSignal: true,
+        probs,
       }
     }
-    const dirTh = overallChange > 0 ? 'ขาขึ้น' : 'ขาลง'
-    const dirEn = overallChange > 0 ? 'uptrend' : 'downtrend'
+    const dirTh = s.overallChange > 0 ? 'ขาขึ้น' : 'ขาลง'
+    const dirEn = s.overallChange > 0 ? 'uptrend' : 'downtrend'
     return {
       type: 'with_trend',
       reason: `มี ${dirTh}ชัดเจนใน 20 แท่งล่าสุด`,
       reasonEn: `Clear ${dirEn} over last 20 bars`,
       hasSignal: true,
+      probs,
     }
   }
 
-  // counterScore === maxScore
-  const dirTh = recentMove > 0 ? 'ขึ้น' : 'ลง'
-  const dirEn = recentMove > 0 ? 'up' : 'down'
+  // counter
+  const dirTh = s.recentMove > 0 ? 'ขึ้น' : 'ลง'
+  const dirEn = s.recentMove > 0 ? 'up' : 'down'
   return {
     type: 'counter',
     reason: `ราคาวิ่ง${dirTh}มาแรงใน 8 แท่ง — โอกาส counter move`,
     reasonEn: `Strong 8-bar move ${dirEn} — potential counter move`,
     hasSignal: true,
+    probs,
   }
 }
 
@@ -278,6 +355,7 @@ function buildSkipResult(
       setupActual: setupClass.type,
       setupReason: setupClass.reason,
       setupHasSignal: setupClass.hasSignal,
+      setupProbs: setupClass.probs,
       action: 'skip',
       outcome: 'skip',
       rMultiple: 0,

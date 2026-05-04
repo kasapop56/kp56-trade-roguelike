@@ -17,15 +17,15 @@ const BUTTON_DEFS: { value: BiasGuess; labelKey: string; icon: string; color: st
     value:    'up',
     labelKey: 'bias.up',
     icon:     '▲',
-    color:    'border-emerald-700 bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/60',
-    active:   'border-emerald-400 bg-emerald-800/60 text-emerald-300 ring-2 ring-emerald-400/40',
+    color:    'border-green-600 bg-green-900/40 text-green-300 hover:bg-green-800/60',
+    active:   'border-green-300 bg-green-600/70 text-white ring-2 ring-green-300/50 shadow-lg shadow-green-500/20',
   },
   {
     value:    'down',
     labelKey: 'bias.down',
     icon:     '▼',
-    color:    'border-rose-700 bg-rose-900/30 text-rose-400 hover:bg-rose-900/60',
-    active:   'border-rose-400 bg-rose-800/60 text-rose-300 ring-2 ring-rose-400/40',
+    color:    'border-red-600 bg-red-900/40 text-red-300 hover:bg-red-800/60',
+    active:   'border-red-300 bg-red-600/70 text-white ring-2 ring-red-300/50 shadow-lg shadow-red-500/20',
   },
 ]
 

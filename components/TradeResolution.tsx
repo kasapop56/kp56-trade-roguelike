@@ -1,9 +1,8 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import type { PendingTrade } from '@/store/gameStore'
+import type { PendingTrade, SetupType } from '@/store/gameStore'
 import { useT } from '@/lib/useT'
-import { useGameStore } from '@/store/gameStore'
 
 export type TradeResolutionProps = {
   pending: PendingTrade
@@ -11,9 +10,10 @@ export type TradeResolutionProps = {
   onContinue: () => void
 }
 
+const SETUP_ORDER: SetupType[] = ['with_trend', 'counter', 'structure', 'instinct']
+
 export default function TradeResolution({ pending, biasWasCorrect, onContinue }: TradeResolutionProps) {
   const { t } = useT()
-  const language = useGameStore(s => s.settings.language)
   const { result, finalEquityDelta } = pending
   const isWin     = result.outcome === 'win'
   const isSkip    = result.outcome === 'skip'
@@ -28,10 +28,8 @@ export default function TradeResolution({ pending, biasWasCorrect, onContinue }:
       ? t('resolution.whyLossSoftened')
       : t('resolution.whyLoss')
 
-  const { setupActual, setupReason, setupHasSignal, setupGuess } = result.record
+  const { setupActual, setupReason, setupHasSignal, setupGuess, setupProbs } = result.record
   const guessedCorrectly = setupGuess === setupActual
-  // For display: use EN reason if language is EN (stored on record as reasonEn via tradeSimulator)
-  // Currently only TH reason is stored; fallback to setupReason for both languages
   const reasonText = setupReason
 
   return (
@@ -72,8 +70,8 @@ export default function TradeResolution({ pending, biasWasCorrect, onContinue }:
         </div>
       )}
 
-      {/* Setup explanation — shown immediately after TP/SL */}
-      <div className={`rounded-lg border px-3 py-2.5 flex flex-col gap-1.5 ${
+      {/* Setup probability bars — shown immediately after TP/SL */}
+      <div className={`rounded-lg border px-3 py-2.5 flex flex-col gap-2 ${
         setupHasSignal
           ? 'border-slate-600 bg-slate-800/40'
           : 'border-amber-700/60 bg-amber-900/10'
@@ -91,14 +89,26 @@ export default function TradeResolution({ pending, biasWasCorrect, onContinue }:
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className={`text-sm font-semibold ${setupHasSignal ? 'text-slate-200' : 'text-amber-400'}`}>
-            {!setupHasSignal && '⚠ '}{t(`setup.${setupActual}`)}
-          </span>
+        <div className="flex flex-col gap-1">
+          {SETUP_ORDER.map((type) => {
+            const pct = (setupProbs[type] ?? 0) * 100
+            const isActual = type === setupActual
+            const isGuess  = type === setupGuess
+            return (
+              <SetupBar
+                key={type}
+                label={t(`setup.${type}`)}
+                pct={pct}
+                isActual={isActual}
+                isGuess={isGuess}
+                isInstinct={type === 'instinct'}
+              />
+            )
+          })}
         </div>
 
-        <p className={`text-[11px] leading-relaxed ${setupHasSignal ? 'text-slate-400' : 'text-amber-500/80'}`}>
-          {reasonText}
+        <p className={`text-[11px] leading-relaxed mt-0.5 ${setupHasSignal ? 'text-slate-400' : 'text-amber-500/80'}`}>
+          {!setupHasSignal && '⚠ '}{reasonText}
         </p>
       </div>
 
@@ -121,6 +131,35 @@ function DetailRow({ label, value, valueColor = 'text-white' }: { label: string;
     <div className="flex items-center justify-between">
       <span className="text-slate-500">{label}</span>
       <span className={`font-mono font-medium ${valueColor}`}>{value}</span>
+    </div>
+  )
+}
+
+function SetupBar({ label, pct, isActual, isGuess, isInstinct }: {
+  label: string; pct: number; isActual: boolean; isGuess: boolean; isInstinct: boolean
+}) {
+  const barColor = isActual
+    ? (isInstinct ? 'bg-amber-500' : 'bg-emerald-500')
+    : 'bg-slate-600'
+  const labelColor = isActual
+    ? (isInstinct ? 'text-amber-300' : 'text-emerald-300')
+    : 'text-slate-400'
+
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      <div className="w-24 flex items-center gap-1 shrink-0">
+        <span className={`${labelColor} ${isActual ? 'font-semibold' : ''} truncate`}>{label}</span>
+        {isGuess && <span className="text-[9px] text-slate-500" title="Your guess">◀</span>}
+      </div>
+      <div className="flex-1 h-2 rounded-full bg-slate-900/60 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.max(2, pct)}%` }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+          className={`h-full ${barColor}`}
+        />
+      </div>
+      <span className={`font-mono w-9 text-right tabular-nums ${labelColor}`}>{pct.toFixed(0)}%</span>
     </div>
   )
 }
