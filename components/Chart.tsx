@@ -39,6 +39,7 @@ export type ChartProps = {
   animating?: boolean
   animationSpeedMs?: number
   tradeOverlay?: TradeOverlay | null
+  biasRefPrice?: number | null
   className?: string
 }
 
@@ -64,15 +65,17 @@ export default function Chart({
   animating = false,
   animationSpeedMs = 200,
   tradeOverlay,
+  biasRefPrice,
   className = '',
 }: ChartProps) {
-  const containerRef  = useRef<HTMLDivElement>(null)
-  const chartRef      = useRef<IChartApi | null>(null)
-  const seriesRef     = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const animTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
-  const revealedRef   = useRef(revealedCount)
-  const priceLinesRef = useRef<IPriceLine[]>([])
-  const markersRef    = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const containerRef    = useRef<HTMLDivElement>(null)
+  const chartRef        = useRef<IChartApi | null>(null)
+  const seriesRef       = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const animTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const revealedRef     = useRef(revealedCount)
+  const priceLinesRef   = useRef<IPriceLine[]>([])
+  const markersRef      = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const biasLineRef     = useRef<IPriceLine | null>(null)
 
   // Build chart on mount
   useEffect(() => {
@@ -250,6 +253,26 @@ export default function Chart({
 
     markers.setMarkers(newMarkers)
   }, [tradeOverlay, candles])
+
+  // Bias reference line — shows where player made their UP/DOWN guess
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+    if (biasLineRef.current) {
+      series.removePriceLine(biasLineRef.current)
+      biasLineRef.current = null
+    }
+    if (biasRefPrice) {
+      biasLineRef.current = series.createPriceLine({
+        price: biasRefPrice,
+        color: '#f59e0b',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: '◎ Bias',
+      })
+    }
+  }, [biasRefPrice])
 
   return (
     <div

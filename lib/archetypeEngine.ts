@@ -78,9 +78,9 @@ function deriveArchetype(stats: Stats, run: Run): Archetype {
   setupWinrates.sort((a, b) => b[1] - a[1])
   const best = setupWinrates[0][0]
 
-  if (best === 'breakout')  return 'Breakout Chaser'
-  if (best === 'pullback' && patienceScore > 0.2) return 'Patient Pullback Trader'
-  if (best === 'range')     return 'Range Bouncer'
+  if (best === 'structure')  return 'Breakout Chaser'
+  if (best === 'with_trend' && patienceScore > 0.2) return 'Patient Pullback Trader'
+  if (best === 'counter')    return 'Range Bouncer'
 
   const winrate = trades.length > 0
     ? trades.filter(t => t.outcome === 'win').length / trades.length

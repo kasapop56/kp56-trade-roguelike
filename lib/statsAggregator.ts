@@ -16,9 +16,10 @@ export function aggregateStats(prev: Stats, run: Run): Stats {
   const winRateBySetup = { ...prev.winRateBySetup } as Stats['winRateBySetup']
   for (const t of trades) {
     const key = t.setupActual as SetupType
+    const prev_entry = winRateBySetup[key] ?? { wins: 0, total: 0 }
     winRateBySetup[key] = {
-      wins:  winRateBySetup[key].wins  + (t.outcome === 'win' ? 1 : 0),
-      total: winRateBySetup[key].total + 1,
+      wins:  prev_entry.wins  + (t.outcome === 'win' ? 1 : 0),
+      total: prev_entry.total + 1,
     }
   }
 

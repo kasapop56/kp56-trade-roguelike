@@ -13,7 +13,7 @@ export type TradePanelProps = {
   onAction: (action: TradeAction, setupGuess: SetupType | null) => void
 }
 
-const SETUP_VALUES: SetupType[] = ['breakout', 'pullback', 'range', 'reversal']
+const SETUP_VALUES: SetupType[] = ['with_trend', 'counter', 'structure', 'instinct']
 
 export default function TradePanel({ equity, riskAmount, biasDamageReduction, disabled = false, onAction }: TradePanelProps) {
   const { t } = useT()

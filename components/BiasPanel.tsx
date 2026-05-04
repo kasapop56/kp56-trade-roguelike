@@ -14,25 +14,18 @@ export type BiasPanelProps = {
 
 const BUTTON_DEFS: { value: BiasGuess; labelKey: string; icon: string; color: string; active: string }[] = [
   {
-    value:  'green',
-    labelKey: 'bias.bullish',
-    icon:   '▲',
-    color:  'border-emerald-700 bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/60',
-    active: 'border-emerald-400 bg-emerald-800/60 text-emerald-300 ring-2 ring-emerald-400/40',
+    value:    'up',
+    labelKey: 'bias.up',
+    icon:     '▲',
+    color:    'border-emerald-700 bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/60',
+    active:   'border-emerald-400 bg-emerald-800/60 text-emerald-300 ring-2 ring-emerald-400/40',
   },
   {
-    value:  'red',
-    labelKey: 'bias.bearish',
-    icon:   '▼',
-    color:  'border-rose-700 bg-rose-900/30 text-rose-400 hover:bg-rose-900/60',
-    active: 'border-rose-400 bg-rose-800/60 text-rose-300 ring-2 ring-rose-400/40',
-  },
-  {
-    value:  'doji',
-    labelKey: 'bias.doji',
-    icon:   '—',
-    color:  'border-slate-600 bg-slate-800/30 text-slate-400 hover:bg-slate-800/60',
-    active: 'border-slate-400 bg-slate-700/60 text-slate-200 ring-2 ring-slate-400/40',
+    value:    'down',
+    labelKey: 'bias.down',
+    icon:     '▼',
+    color:    'border-rose-700 bg-rose-900/30 text-rose-400 hover:bg-rose-900/60',
+    active:   'border-rose-400 bg-rose-800/60 text-rose-300 ring-2 ring-rose-400/40',
   },
 ]
 
@@ -61,13 +54,13 @@ export default function BiasPanel({ pending, streak, lastResult, disabled = fals
               whileHover={!disabled ? { scale: 1.04 } : {}}
               whileTap={!disabled ? { scale: 0.95 } : {}}
               className={[
-                'flex-1 flex flex-col items-center gap-1 py-2.5 rounded-lg border-2 text-sm font-medium transition-all duration-150',
+                'flex-1 flex flex-col items-center gap-1 py-3 rounded-lg border-2 text-sm font-medium transition-all duration-150',
                 isActive ? btn.active : btn.color,
                 disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
               ].join(' ')}
             >
-              <span className="text-lg leading-none">{btn.icon}</span>
-              <span className="text-xs">{t(btn.labelKey)}</span>
+              <span className="text-2xl leading-none">{btn.icon}</span>
+              <span className="text-xs font-bold tracking-widest">{t(btn.labelKey)}</span>
             </motion.button>
           )
         })}

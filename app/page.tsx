@@ -143,10 +143,11 @@ export default function GamePage() {
           <Chart
             candles={run.candles}
             revealedCount={run.revealedCandleIndex}
-            warmupCount={50}
+            warmupCount={120}
             animating={run.awaitingTradeDecision || !!run.pendingTrade}
             animationSpeedMs={run.pendingTrade ? 180 : 300}
             tradeOverlay={tradeOverlay}
+            biasRefPrice={run.biasRefPrice}
             className="h-full"
           />
         </div>

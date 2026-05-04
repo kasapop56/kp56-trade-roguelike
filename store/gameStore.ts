@@ -17,8 +17,8 @@ export type Candle = {
 }
 
 export type SquareType  = 'trade' | 'skip' | 'wisdom' | 'mystery'
-export type SetupType   = 'breakout' | 'pullback' | 'range' | 'reversal'
-export type BiasGuess   = 'green' | 'red' | 'doji'
+export type SetupType   = 'with_trend' | 'counter' | 'structure' | 'instinct'
+export type BiasGuess   = 'up' | 'down'
 export type TradeAction = 'buy' | 'sell' | 'skip'
 export type Session     = 'asia' | 'london' | 'ny'
 export type PerkType    = 'iron_will' | 'sniper' | 'extra_skip' | 'bull_vision' | 'second_chance'
@@ -35,6 +35,8 @@ export type TradeRecord = {
   squareIndex: number
   setupGuess: SetupType
   setupActual: SetupType
+  setupReason: string
+  setupHasSignal: boolean
   action: TradeAction
   outcome: 'win' | 'loss' | 'skip'
   rMultiple: number
@@ -64,11 +66,12 @@ export type Run = {
   equity: number
   startingEquity: number
 
-  biasHistory: Array<{ guess: BiasGuess; actual: BiasGuess; correct: boolean }>
+  biasHistory: Array<{ guess: BiasGuess; actual: BiasGuess; correct: boolean; refPrice: number }>
   trades: TradeRecord[]
 
   // turn-state
   pendingBiasGuess: BiasGuess | null
+  biasRefPrice: number | null
   diceValue: number | null
   previewableSquares: number[]
   awaitingTradeDecision: boolean
@@ -86,7 +89,7 @@ export type Run = {
 export type Stats = {
   totalRuns: number
   avgBiasAccuracy: number
-  winRateBySetup: Record<SetupType, { wins: number; total: number }>
+  winRateBySetup: Partial<Record<SetupType, { wins: number; total: number }>>
   winRateBySession: Record<Session, { wins: number; total: number }>
   tiltIndex: number
   patienceScore: number
@@ -147,6 +150,7 @@ export const useGameStore = create<Store>()(
             biasHistory: [],
             trades: [],
             pendingBiasGuess: null,
+            biasRefPrice: null,
             diceValue: null,
             previewableSquares: [],
             awaitingTradeDecision: false,
@@ -161,7 +165,8 @@ export const useGameStore = create<Store>()(
 
       setBiasGuess: (guess) => {
         const r = get().run; if (!r) return
-        set({ run: { ...r, pendingBiasGuess: guess } })
+        const refPrice = r.candles[r.revealedCandleIndex - 1]?.close ?? null
+        set({ run: { ...r, pendingBiasGuess: guess, biasRefPrice: refPrice } })
       },
 
       rollDice: () => {
@@ -181,7 +186,7 @@ export const useGameStore = create<Store>()(
         if (!r.previewableSquares.includes(idx)) return
 
         const square     = r.squares[idx]
-        const biasResult = resolveBias(r)
+        const biasResult = resolveBias(r, square.candleEnd)
         const updatedSquares = r.squares.map((s, i) =>
           i === idx ? { ...s, resolved: true } : s
         )
@@ -349,16 +354,12 @@ async function fetchCandles(seed: string): Promise<Candle[]> {
   return res.json()
 }
 
-function resolveBias(r: Run) {
-  if (!r.pendingBiasGuess) return null
-  const next  = r.candles[r.revealedCandleIndex + 1]
-  if (!next) return null
-  const range = next.high - next.low
-  const body  = Math.abs(next.close - next.open)
-  const actual: BiasGuess =
-    body < range * 0.1      ? 'doji' :
-    next.close > next.open  ? 'green' : 'red'
-  return { guess: r.pendingBiasGuess, actual, correct: r.pendingBiasGuess === actual }
+function resolveBias(r: Run, targetEndIdx: number) {
+  if (!r.pendingBiasGuess || r.biasRefPrice === null) return null
+  const finalCandle = r.candles[targetEndIdx - 1]
+  if (!finalCandle) return null
+  const actual: BiasGuess = finalCandle.close > r.biasRefPrice ? 'up' : 'down'
+  return { guess: r.pendingBiasGuess, actual, correct: r.pendingBiasGuess === actual, refPrice: r.biasRefPrice }
 }
 
 function pickWisdomChoices(currentPerk: PerkType | null): PerkType[] {
@@ -380,10 +381,10 @@ function emptyStats(): Stats {
     totalRuns: 0,
     avgBiasAccuracy: 0,
     winRateBySetup: {
-      breakout: { wins: 0, total: 0 },
-      pullback: { wins: 0, total: 0 },
-      range:    { wins: 0, total: 0 },
-      reversal: { wins: 0, total: 0 },
+      with_trend: { wins: 0, total: 0 },
+      counter:    { wins: 0, total: 0 },
+      structure:  { wins: 0, total: 0 },
+      instinct:   { wins: 0, total: 0 },
     },
     winRateBySession: {
       asia:   { wins: 0, total: 0 },
