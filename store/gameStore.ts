@@ -94,7 +94,7 @@ export type Stats = {
 
 // ============ CONSTANTS ============
 
-const WARMUP_CANDLES     = 50
+const WARMUP_CANDLES     = 120
 const CANDLES_PER_SQUARE = 8
 const STARTING_EQUITY    = 1000
 const RISK_PER_TRADE     = 0.10

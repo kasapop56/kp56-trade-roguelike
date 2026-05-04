@@ -132,10 +132,18 @@ export default function Chart({
   }, [])
 
   // Apply candle data
+  const VISIBLE_BARS = 100
+
   const applyCandles = useCallback((count: number) => {
     if (!seriesRef.current || !candles.length) return
     const visible = candles.slice(0, count).map(toChartCandle)
     seriesRef.current.setData(visible)
+    // After setting data, fit to show last VISIBLE_BARS candles
+    if (chartRef.current && visible.length >= 2) {
+      const from = visible[Math.max(0, visible.length - VISIBLE_BARS)].time
+      const to   = visible[visible.length - 1].time
+      chartRef.current.timeScale().setVisibleRange({ from, to } as { from: Time; to: Time })
+    }
   }, [candles])
 
   // Animate reveal: when revealedCount increases, walk forward one candle at a time
