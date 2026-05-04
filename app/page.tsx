@@ -13,13 +13,18 @@ import WisdomPanel from '@/components/WisdomPanel'
 import TradeResolution from '@/components/TradeResolution'
 import type { ChartProps } from '@/components/Chart'
 import type { TradeAction, SetupType, MysteryOutcome } from '@/store/gameStore'
+import { useT } from '@/lib/useT'
+import type { Language } from '@/lib/i18n'
 
 export default function GamePage() {
   const {
     run, stats, lastRunSummary,
     startRun, setBiasGuess, rollDice, selectLandingSquare,
     selectPerk, dismissMysteryOutcome, decideTrade, confirmTradeResult, endRun, dismissScorecard,
+    setLanguage,
   } = useGameStore()
+  const language = useGameStore(s => s.settings.language)
+  const { t } = useT()
   const [starting, setStarting] = useState(false)
 
   // Bias streak (consecutive correct)
@@ -59,7 +64,10 @@ export default function GamePage() {
   // ── Scorecard overlay (shown after endRun) ──────────────────────────────
   if (lastRunSummary) {
     return (
-      <div className="min-h-screen bg-[#0d0d1a]">
+      <div className="min-h-screen bg-[#0d0d1a] relative">
+        <div className="absolute top-3 right-3 z-[60]">
+          <LanguageToggle current={language} onChange={setLanguage} />
+        </div>
         <Scorecard
           summary={lastRunSummary}
           onNewRun={() => { dismissScorecard(); handleStart() }}
@@ -70,7 +78,15 @@ export default function GamePage() {
 
   // ── Start screen ─────────────────────────────────────────────────────────
   if (!run) {
-    return <StartScreen onStart={handleStart} starting={starting} stats={stats} />
+    return (
+      <StartScreen
+        onStart={handleStart}
+        starting={starting}
+        stats={stats}
+        language={language}
+        onChangeLanguage={setLanguage}
+      />
+    )
   }
 
   const isRunOver = run.currentSquareIndex >= run.squares.length - 1
@@ -102,16 +118,17 @@ export default function GamePage() {
       {/* Top bar */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-yellow-400 font-bold tracking-tight">TRADE ROGUELIKE</span>
-          <span className="text-xs text-slate-500 hidden sm:inline">M5 · XAUUSD</span>
+          <span className="text-yellow-400 font-bold tracking-tight">{t('app.title')}</span>
+          <span className="text-xs text-slate-500 hidden sm:inline">{t('app.subtitle')}</span>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <span className="text-slate-400">
-            Equity <span className="text-white font-mono">${run.equity.toFixed(0)}</span>
+            {t('app.equity')} <span className="text-white font-mono">${run.equity.toFixed(0)}</span>
           </span>
           <span className="text-slate-400">
-            Square <span className="text-white">{Math.max(0, run.currentSquareIndex + 1)}/30</span>
+            {t('app.square')} <span className="text-white">{Math.max(0, run.currentSquareIndex + 1)}/30</span>
           </span>
+          <LanguageToggle current={language} onChange={setLanguage} />
         </div>
       </header>
 
@@ -210,15 +227,15 @@ export default function GamePage() {
               {/* Run over */}
               {isRunOver && (
                 <motion.div key="end" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="text-center py-4">
-                  <p className="text-lg font-bold text-yellow-400 mb-2">Run Complete!</p>
+                  <p className="text-lg font-bold text-yellow-400 mb-2">{t('over.title')}</p>
                   <p className="text-sm text-slate-400 mb-4">
-                    Final equity: <span className="text-white font-mono">${run.equity.toFixed(0)}</span>
+                    {t('over.finalEquity')} <span className="text-white font-mono">${run.equity.toFixed(0)}</span>
                   </p>
                   <button
                     onClick={endRun}
                     className="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors"
                   >
-                    View Scorecard
+                    {t('over.viewScorecard')}
                   </button>
                 </motion.div>
               )}
@@ -240,25 +257,47 @@ function MysteryResult({
   outcome: MysteryOutcome | null
   onDismiss: () => void
 }) {
+  const { t } = useT()
   if (!outcome) return null
   const isGain = outcome.direction === 'gain'
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-slate-400 uppercase tracking-widest">Mystery Square</p>
+      <p className="text-xs text-slate-400 uppercase tracking-widest">{t('mystery.title')}</p>
       <div className={`rounded-xl border-2 p-4 text-center ${isGain ? 'border-teal-600 bg-teal-900/20' : 'border-rose-700 bg-rose-900/20'}`}>
         <p className="text-3xl mb-2">{isGain ? '🎉' : '💀'}</p>
         <p className={`text-xl font-bold font-mono ${isGain ? 'text-teal-300' : 'text-rose-400'}`}>
           {isGain ? '+' : '-'}{outcome.rMultiple}R
         </p>
         <p className="text-sm text-slate-400 mt-1">
-          {isGain ? 'Lucky flip!' : 'Unlucky flip'}
+          {t(isGain ? 'mystery.lucky' : 'mystery.unlucky')}
         </p>
       </div>
       <button
         onClick={onDismiss}
         className="w-full py-2 rounded-lg border border-slate-700 hover:border-slate-500 text-slate-300 text-sm transition-colors"
       >
-        Continue
+        {t('mystery.continue')}
+      </button>
+    </div>
+  )
+}
+
+// ─── Language toggle ───────────────────────────────────────────────────────
+
+function LanguageToggle({ current, onChange }: { current: Language; onChange: (lang: Language) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-md bg-slate-800/60 border border-slate-700 p-0.5 text-xs">
+      <button
+        onClick={() => onChange('th')}
+        className={`px-2 py-0.5 rounded transition-colors ${current === 'th' ? 'bg-amber-500 text-slate-900 font-bold' : 'text-slate-400 hover:text-white'}`}
+      >
+        TH
+      </button>
+      <button
+        onClick={() => onChange('en')}
+        className={`px-2 py-0.5 rounded transition-colors ${current === 'en' ? 'bg-amber-500 text-slate-900 font-bold' : 'text-slate-400 hover:text-white'}`}
+      >
+        EN
       </button>
     </div>
   )
@@ -267,30 +306,37 @@ function MysteryResult({
 // ─── Start screen ───────────────────────────────────────────────────────────
 
 function StartScreen({
-  onStart, starting, stats,
+  onStart, starting, stats, language, onChangeLanguage,
 }: {
   onStart: () => void
   starting: boolean
   stats: { totalRuns: number; avgBiasAccuracy: number }
+  language: Language
+  onChangeLanguage: (lang: Language) => void
 }) {
+  const { t } = useT()
   return (
-    <div className="min-h-screen bg-[#0d0d1a] flex flex-col items-center justify-center gap-8 px-4">
+    <div className="min-h-screen bg-[#0d0d1a] flex flex-col items-center justify-center gap-8 px-4 relative">
+      <div className="absolute top-3 right-3">
+        <LanguageToggle current={language} onChange={onChangeLanguage} />
+      </div>
+
       <div className="text-center">
-        <h1 className="text-4xl font-bold text-yellow-400 tracking-tight mb-2">TRADE ROGUELIKE</h1>
-        <p className="text-slate-400 text-lg">XAUUSD · M5 · Deliberate Practice</p>
+        <h1 className="text-4xl font-bold text-yellow-400 tracking-tight mb-2">{t('app.title')}</h1>
+        <p className="text-slate-400 text-lg">{t('start.tagline')}</p>
       </div>
 
       {stats.totalRuns > 0 && (
         <div className="flex gap-8 text-center">
           <div>
             <p className="text-2xl font-bold text-white">{stats.totalRuns}</p>
-            <p className="text-slate-500 text-sm">Runs</p>
+            <p className="text-slate-500 text-sm">{t('start.runs')}</p>
           </div>
           <div>
             <p className="text-2xl font-bold text-white">
               {(stats.avgBiasAccuracy * 100).toFixed(0)}%
             </p>
-            <p className="text-slate-500 text-sm">Bias Accuracy</p>
+            <p className="text-slate-500 text-sm">{t('start.biasAccuracy')}</p>
           </div>
         </div>
       )}
@@ -302,11 +348,11 @@ function StartScreen({
         whileTap={!starting ? { scale: 0.96 } : {}}
         className="px-10 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-900 font-bold text-lg transition-colors shadow-lg shadow-amber-500/20"
       >
-        {starting ? 'Loading…' : stats.totalRuns > 0 ? 'New Run' : 'Start Run'}
+        {starting ? t('start.loading') : stats.totalRuns > 0 ? t('start.next') : t('start.first')}
       </motion.button>
 
       <p className="text-xs text-slate-600 max-w-xs text-center">
-        For education only — not financial advice
+        {t('app.disclaimer')}
       </p>
     </div>
   )

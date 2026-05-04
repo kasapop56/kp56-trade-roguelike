@@ -3,29 +3,20 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { TradeAction, SetupType } from '@/store/gameStore'
-
-// ============ TYPES ============
+import { useT } from '@/lib/useT'
 
 export type TradePanelProps = {
   equity: number
-  riskAmount: number           // 10% of equity = 1R
-  biasDamageReduction: boolean // bias ถูกในรอบนี้ → ลด loss 50%
+  riskAmount: number
+  biasDamageReduction: boolean
   disabled?: boolean
   onAction: (action: TradeAction, setupGuess: SetupType | null) => void
 }
 
-// ============ CONFIG ============
-
-const SETUP_OPTIONS: { value: SetupType; label: string; desc: string }[] = [
-  { value: 'breakout',  label: 'Breakout',  desc: 'Price breaks key level' },
-  { value: 'pullback',  label: 'Pullback',  desc: 'Retrace in a trend' },
-  { value: 'range',     label: 'Range',     desc: 'Bounce between levels' },
-  { value: 'reversal',  label: 'Reversal',  desc: 'Trend change signal' },
-]
-
-// ============ COMPONENT ============
+const SETUP_VALUES: SetupType[] = ['breakout', 'pullback', 'range', 'reversal']
 
 export default function TradePanel({ equity, riskAmount, biasDamageReduction, disabled = false, onAction }: TradePanelProps) {
+  const { t } = useT()
   const [setupGuess, setSetupGuess] = useState<SetupType | null>(null)
   const [step, setStep] = useState<'setup' | 'action'>('setup')
 
@@ -36,45 +27,38 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
 
   function handleAction(action: TradeAction) {
     onAction(action, setupGuess)
-    // Reset for next trade
     setSetupGuess(null)
     setStep('setup')
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-400 uppercase tracking-widest">Trade Square</p>
+        <p className="text-xs text-slate-400 uppercase tracking-widest">{t('trade.title')}</p>
         {biasDamageReduction && (
           <motion.span
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             className="text-xs px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-400"
           >
-            -50% loss
+            {t('trade.bonus')}
           </motion.span>
         )}
       </div>
 
-      {/* Help text */}
-      <p className="text-[11px] text-slate-500 leading-relaxed">
-        Read the chart and decide. SL/TP auto-set at 1.5×ATR (1:1 R:R). SKIP keeps you safe but earns nothing.
-      </p>
+      <p className="text-[11px] text-slate-500 leading-relaxed">{t('trade.help')}</p>
 
-      {/* Equity + risk info */}
       <div className="flex gap-3 text-xs">
         <div className="flex-1 rounded-lg bg-slate-800/50 border border-slate-700 px-3 py-2">
-          <p className="text-slate-500">Equity</p>
+          <p className="text-slate-500">{t('trade.equity')}</p>
           <p className="text-white font-mono font-medium">${equity.toFixed(0)}</p>
         </div>
         <div className="flex-1 rounded-lg bg-slate-800/50 border border-slate-700 px-3 py-2">
-          <p className="text-slate-500">Risk (1R)</p>
+          <p className="text-slate-500">{t('trade.risk')}</p>
           <p className="text-amber-400 font-mono font-medium">${riskAmount.toFixed(0)}</p>
         </div>
       </div>
 
-      {/* Step 1: Guess setup type */}
       <AnimatePresence mode="wait">
         {step === 'setup' && (
           <motion.div
@@ -84,12 +68,14 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
             exit={{ opacity: 0, x: 8 }}
             className="flex flex-col gap-2"
           >
-            <p className="text-sm text-slate-300">What setup do you see? <span className="text-slate-600">(optional)</span></p>
+            <p className="text-sm text-slate-300">
+              {t('trade.setupQ')} <span className="text-slate-600">{t('trade.optional')}</span>
+            </p>
             <div className="grid grid-cols-2 gap-2">
-              {SETUP_OPTIONS.map((opt) => (
+              {SETUP_VALUES.map((value) => (
                 <motion.button
-                  key={opt.value}
-                  onClick={() => !disabled && handleSetupSelect(opt.value)}
+                  key={value}
+                  onClick={() => !disabled && handleSetupSelect(value)}
                   disabled={disabled}
                   whileHover={!disabled ? { scale: 1.03 } : {}}
                   whileTap={!disabled ? { scale: 0.97 } : {}}
@@ -98,18 +84,17 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
                     disabled ? 'opacity-40 cursor-not-allowed' : 'hover:border-slate-400 hover:bg-slate-700/40 cursor-pointer',
                   ].join(' ')}
                 >
-                  <p className="text-sm text-slate-200">{opt.label}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{opt.desc}</p>
+                  <p className="text-sm text-slate-200">{t(`setup.${value}`)}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{t(`setup.${value}Desc`)}</p>
                 </motion.button>
               ))}
             </div>
-            {/* Skip setup guess */}
             <button
               onClick={() => !disabled && setStep('action')}
               disabled={disabled}
               className="text-xs text-slate-600 hover:text-slate-400 transition-colors text-center mt-1"
             >
-              Skip setup guess →
+              {t('trade.skipSetup')}
             </button>
           </motion.div>
         )}
@@ -124,27 +109,27 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
           >
             {setupGuess && (
               <p className="text-xs text-slate-400">
-                Setup guess: <span className="text-slate-200 capitalize">{setupGuess}</span>
+                {t('trade.setupGuess')} <span className="text-slate-200">{t(`setup.${setupGuess}`)}</span>
               </p>
             )}
-            <p className="text-sm text-slate-300">Your action?</p>
+            <p className="text-sm text-slate-300">{t('trade.actionQ')}</p>
             <div className="flex gap-2">
               <ActionButton
-                label="BUY"
+                label={t('trade.buy')}
                 icon="▲"
                 color="bg-emerald-900/40 border-emerald-600 text-emerald-300 hover:bg-emerald-800/60"
                 disabled={disabled}
                 onClick={() => handleAction('buy')}
               />
               <ActionButton
-                label="SELL"
+                label={t('trade.sell')}
                 icon="▼"
                 color="bg-rose-900/40 border-rose-600 text-rose-300 hover:bg-rose-800/60"
                 disabled={disabled}
                 onClick={() => handleAction('sell')}
               />
               <ActionButton
-                label="SKIP"
+                label={t('trade.skip')}
                 icon="—"
                 color="bg-slate-800/40 border-slate-600 text-slate-400 hover:bg-slate-700/60"
                 disabled={disabled}
@@ -155,7 +140,7 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
               onClick={() => setStep('setup')}
               className="text-xs text-slate-600 hover:text-slate-400 transition-colors text-center"
             >
-              ← Back
+              {t('trade.back')}
             </button>
           </motion.div>
         )}
@@ -163,8 +148,6 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
     </div>
   )
 }
-
-// ============ SUB-COMPONENTS ============
 
 function ActionButton({
   label, icon, color, disabled, onClick,

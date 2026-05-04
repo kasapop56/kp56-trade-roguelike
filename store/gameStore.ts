@@ -7,6 +7,7 @@ import { generateBoard, createSeededRng } from '../lib/boardGenerator'
 import { simulateTrade, type SimulateTradeResult } from '../lib/tradeSimulator'
 import { aggregateStats as mergeStats } from '../lib/statsAggregator'
 import { buildRunSummary, type RunSummary } from '../lib/archetypeEngine'
+import type { Language } from '../lib/i18n'
 
 // ============ TYPES ============
 
@@ -107,7 +108,7 @@ type Store = {
   run: Run | null
   stats: Stats
   lastRunSummary: RunSummary | null
-  settings: { sound: boolean; animations: boolean; colorBlind: boolean; silentMode: boolean }
+  settings: { sound: boolean; animations: boolean; colorBlind: boolean; silentMode: boolean; language: Language }
 
   startRun: (seed: string) => Promise<void>
   setBiasGuess: (g: BiasGuess) => void
@@ -120,6 +121,7 @@ type Store = {
   endRun: () => void
   dismissScorecard: () => void
   toggleSound: () => void
+  setLanguage: (lang: Language) => void
 }
 
 export const useGameStore = create<Store>()(
@@ -128,7 +130,7 @@ export const useGameStore = create<Store>()(
       run: null,
       stats: emptyStats(),
       lastRunSummary: null,
-      settings: { sound: true, animations: true, colorBlind: false, silentMode: false },
+      settings: { sound: true, animations: true, colorBlind: false, silentMode: false, language: 'th' },
 
       startRun: async (seed) => {
         const candles = await fetchCandles(seed)
@@ -330,6 +332,8 @@ export const useGameStore = create<Store>()(
       toggleSound: () => set((s) => ({
         settings: { ...s.settings, sound: !s.settings.sound },
       })),
+
+      setLanguage: (lang) => set((s) => ({ settings: { ...s.settings, language: lang } })),
     }),
     {
       name: 'trade-roguelike-v1',

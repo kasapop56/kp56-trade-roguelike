@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { SquareType } from '@/store/gameStore'
+import { useT } from '@/lib/useT'
 
 // ============ TYPES ============
 
@@ -42,6 +43,7 @@ const TYPE_ICONS: Record<SquareType, string> = {
 
 export default function Dice({ value, previewableSquares, disabled = false, onRoll }: DiceProps) {
   const [rolling, setRolling] = useState(false)
+  const { t } = useT()
 
   function handleRoll() {
     if (disabled || rolling) return
@@ -104,12 +106,12 @@ export default function Dice({ value, previewableSquares, disabled = false, onRo
       {/* Roll label */}
       <p className="text-xs text-slate-500 text-center">
         {rolling
-          ? 'Rolling…'
+          ? t('dice.rolling')
           : value !== null
-            ? `Rolled ${value} — pick a square below`
+            ? t('dice.rolled', { n: value })
             : disabled
-              ? 'Predict bias first ↑'
-              : 'Tap to roll d6'}
+              ? t('dice.blocked')
+              : t('dice.idle')}
       </p>
 
       {/* Variant C: type preview for reachable squares */}
@@ -122,7 +124,7 @@ export default function Dice({ value, previewableSquares, disabled = false, onRo
             exit={{ opacity: 0, y: 8 }}
             className="flex flex-col items-center gap-2"
           >
-            <p className="text-xs text-slate-400 uppercase tracking-widest">Choose square</p>
+            <p className="text-xs text-slate-400 uppercase tracking-widest">{t('dice.chooseSquare')}</p>
             <div className="flex gap-2 flex-wrap justify-center">
               {previewableSquares.map(({ index, type }) => (
                 <SquarePreviewChip key={index} squareIndex={index} type={type} />

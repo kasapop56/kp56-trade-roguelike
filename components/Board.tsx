@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Square, SquareType } from '@/store/gameStore'
+import { useT } from '@/lib/useT'
 
 // ============ TYPES ============
 
@@ -19,11 +20,11 @@ export type BoardProps = {
 const COLS = 6
 const ROWS = 5
 
-const SQUARE_META: Record<SquareType, { label: string; icon: string; bg: string; border: string; text: string }> = {
-  trade:   { label: 'Trade',   icon: '⚔',  bg: 'bg-amber-900/60',   border: 'border-amber-500',  text: 'text-amber-300' },
-  skip:    { label: 'Skip',    icon: '⏭',  bg: 'bg-slate-800/60',   border: 'border-slate-500',  text: 'text-slate-300' },
-  wisdom:  { label: 'Wisdom',  icon: '✦',  bg: 'bg-violet-900/60',  border: 'border-violet-500', text: 'text-violet-300' },
-  mystery: { label: '?',       icon: '?',  bg: 'bg-teal-900/60',    border: 'border-teal-500',   text: 'text-teal-300' },
+const SQUARE_META: Record<SquareType, { labelKey: string; icon: string; bg: string; border: string; text: string }> = {
+  trade:   { labelKey: 'square.trade',   icon: '⚔',  bg: 'bg-amber-900/60',   border: 'border-amber-500',  text: 'text-amber-300' },
+  skip:    { labelKey: 'square.skip',    icon: '⏭',  bg: 'bg-slate-800/60',   border: 'border-slate-500',  text: 'text-slate-300' },
+  wisdom:  { labelKey: 'square.wisdom',  icon: '✦',  bg: 'bg-violet-900/60',  border: 'border-violet-500', text: 'text-violet-300' },
+  mystery: { labelKey: 'square.mystery', icon: '?',  bg: 'bg-teal-900/60',    border: 'border-teal-500',   text: 'text-teal-300' },
 }
 
 // ============ LAYOUT HELPER ============
@@ -124,6 +125,7 @@ type SquareCellProps = {
 }
 
 function SquareCell({ index, meta, isCurrent, isPreview, isResolved, isClickable, showType, onClick }: SquareCellProps) {
+  const { t } = useT()
   return (
     <motion.button
       key={index}
@@ -140,7 +142,7 @@ function SquareCell({ index, meta, isCurrent, isPreview, isResolved, isClickable
         isResolved ? 'opacity-40' : '',
         isClickable ? 'cursor-pointer' : 'cursor-default',
       ].filter(Boolean).join(' ')}
-      title={showType ? meta.label : `Square ${index + 1}`}
+      title={showType ? t(meta.labelKey) : `#${index + 1}`}
     >
       {/* Square number */}
       <span className="text-[9px] text-slate-500 leading-none">{index + 1}</span>
@@ -195,12 +197,13 @@ function PawnOverlay({ displayRow, col }: { displayRow: number; col: number }) {
 }
 
 function Legend() {
+  const { t } = useT()
   return (
     <div className="flex flex-wrap gap-3 justify-center mt-3">
       {(Object.entries(SQUARE_META) as [SquareType, typeof SQUARE_META[SquareType]][]).map(([type, meta]) => (
         <div key={type} className="flex items-center gap-1">
           <span className={`text-xs ${meta.text}`}>{meta.icon}</span>
-          <span className="text-xs text-slate-500">{meta.label}</span>
+          <span className="text-xs text-slate-500">{t(meta.labelKey)}</span>
         </div>
       ))}
     </div>

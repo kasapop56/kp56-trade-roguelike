@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import type { PendingTrade } from '@/store/gameStore'
+import { useT } from '@/lib/useT'
 
 export type TradeResolutionProps = {
   pending: PendingTrade
@@ -10,11 +11,19 @@ export type TradeResolutionProps = {
 }
 
 export default function TradeResolution({ pending, biasWasCorrect, onContinue }: TradeResolutionProps) {
+  const { t } = useT()
   const { result, finalEquityDelta } = pending
   const isWin     = result.outcome === 'win'
   const candleCount = result.exitCandleIndex - result.entryCandleIndex
-  const action   = result.action.toUpperCase()
   const distance = Math.abs(result.entryPrice - (isWin ? result.tpPrice : result.slPrice))
+
+  const actionLabel = result.action === 'buy' ? t('trade.buy') : t('trade.sell')
+
+  const whyText = isWin
+    ? t('resolution.whyWin', { dir: result.action === 'buy' ? t('resolution.up') : t('resolution.down') })
+    : biasWasCorrect
+      ? t('resolution.whyLossSoftened')
+      : t('resolution.whyLoss')
 
   return (
     <motion.div
@@ -22,11 +31,10 @@ export default function TradeResolution({ pending, biasWasCorrect, onContinue }:
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col gap-3"
     >
-      {/* Result header */}
       <div className={`rounded-xl border-2 px-4 py-3 ${isWin ? 'border-emerald-600 bg-emerald-900/20' : 'border-rose-700 bg-rose-900/20'}`}>
         <div className="flex items-center justify-between mb-1">
           <p className={`text-sm font-bold uppercase tracking-widest ${isWin ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {isWin ? '✓ Take Profit Hit' : '✗ Stop Loss Hit'}
+            {t(isWin ? 'resolution.tpHit' : 'resolution.slHit')}
           </p>
           <span className={`text-lg font-mono font-bold ${isWin ? 'text-emerald-300' : 'text-rose-300'}`}>
             {finalEquityDelta >= 0 ? '+' : ''}${finalEquityDelta.toFixed(0)}
@@ -35,36 +43,28 @@ export default function TradeResolution({ pending, biasWasCorrect, onContinue }:
         <p className="text-xs text-slate-400">
           {result.record.rMultiple > 0 ? '+' : ''}{result.record.rMultiple.toFixed(2)}R
           {' · '}
-          {candleCount} {candleCount === 1 ? 'candle' : 'candles'} to resolution
+          {t(candleCount === 1 ? 'resolution.candles' : 'resolution.candles_other', { n: candleCount })}
         </p>
       </div>
 
-      {/* Trade detail rows */}
       <div className="rounded-lg bg-slate-800/40 border border-slate-700 px-3 py-2.5 flex flex-col gap-1.5 text-xs">
-        <DetailRow label="Action" value={action} valueColor={action === 'BUY' ? 'text-emerald-400' : 'text-rose-400'} />
-        <DetailRow label="Entry"  value={`$${result.entryPrice.toFixed(2)}`} valueColor="text-amber-400" />
-        <DetailRow label="Take Profit" value={`$${result.tpPrice.toFixed(2)}`} valueColor="text-emerald-400" />
-        <DetailRow label="Stop Loss"   value={`$${result.slPrice.toFixed(2)}`} valueColor="text-rose-400" />
+        <DetailRow label={t('resolution.action')} value={actionLabel} valueColor={result.action === 'buy' ? 'text-emerald-400' : 'text-rose-400'} />
+        <DetailRow label={t('resolution.entry')}  value={`$${result.entryPrice.toFixed(2)}`} valueColor="text-amber-400" />
+        <DetailRow label={t('resolution.tp')}     value={`$${result.tpPrice.toFixed(2)}`}     valueColor="text-emerald-400" />
+        <DetailRow label={t('resolution.sl')}     value={`$${result.slPrice.toFixed(2)}`}     valueColor="text-rose-400" />
         <div className="border-t border-slate-700 my-1" />
-        <DetailRow label="Distance" value={`$${distance.toFixed(2)}`} />
-        <DetailRow label="Setup"    value={result.record.setupActual} valueColor="text-slate-300 capitalize" />
-        <DetailRow label="Session"  value={result.record.session.toUpperCase()} />
+        <DetailRow label={t('resolution.distance')} value={`$${distance.toFixed(2)}`} />
+        <DetailRow label={t('resolution.setup')}    value={t(`setup.${result.record.setupActual}`)} valueColor="text-slate-300" />
+        <DetailRow label={t('resolution.session')}  value={result.record.session.toUpperCase()} />
       </div>
 
-      {/* Why explanation */}
-      <div className="text-xs text-slate-400 px-1 leading-relaxed">
-        {isWin
-          ? `Price moved ${action === 'BUY' ? 'up' : 'down'} to your Take Profit before retracing. You earned 1R.`
-          : biasWasCorrect
-            ? `Price moved against you and hit Stop Loss. Your correct bias guess softened the blow by 50%.`
-            : `Price moved against you and hit Stop Loss. You lost 1R.`}
-      </div>
+      <div className="text-xs text-slate-400 px-1 leading-relaxed">{whyText}</div>
 
       <button
         onClick={onContinue}
         className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-sm transition-colors"
       >
-        Continue
+        {t('resolution.continue')}
       </button>
     </motion.div>
   )

@@ -2,65 +2,56 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import type { BiasGuess } from '@/store/gameStore'
-
-// ============ TYPES ============
+import { useT } from '@/lib/useT'
 
 export type BiasPanelProps = {
-  pending: BiasGuess | null       // guess ที่เลือกแล้ว (null = ยังไม่เลือก)
-  streak: number                  // consecutive correct bias guesses
+  pending: BiasGuess | null
+  streak: number
   lastResult?: 'correct' | 'wrong' | null
   disabled?: boolean
   onGuess: (g: BiasGuess) => void
 }
 
-// ============ CONFIG ============
-
-const BUTTONS: { value: BiasGuess; label: string; icon: string; color: string; active: string }[] = [
+const BUTTON_DEFS: { value: BiasGuess; labelKey: string; icon: string; color: string; active: string }[] = [
   {
     value:  'green',
-    label:  'Bullish',
+    labelKey: 'bias.bullish',
     icon:   '▲',
     color:  'border-emerald-700 bg-emerald-900/30 text-emerald-400 hover:bg-emerald-900/60',
     active: 'border-emerald-400 bg-emerald-800/60 text-emerald-300 ring-2 ring-emerald-400/40',
   },
   {
     value:  'red',
-    label:  'Bearish',
+    labelKey: 'bias.bearish',
     icon:   '▼',
     color:  'border-rose-700 bg-rose-900/30 text-rose-400 hover:bg-rose-900/60',
     active: 'border-rose-400 bg-rose-800/60 text-rose-300 ring-2 ring-rose-400/40',
   },
   {
     value:  'doji',
-    label:  'Doji',
+    labelKey: 'bias.doji',
     icon:   '—',
     color:  'border-slate-600 bg-slate-800/30 text-slate-400 hover:bg-slate-800/60',
     active: 'border-slate-400 bg-slate-700/60 text-slate-200 ring-2 ring-slate-400/40',
   },
 ]
 
-// ============ COMPONENT ============
-
 export default function BiasPanel({ pending, streak, lastResult, disabled = false, onGuess }: BiasPanelProps) {
+  const { t } = useT()
   return (
     <div className="flex flex-col gap-3">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-400 uppercase tracking-widest">Bias Prediction</p>
+        <p className="text-xs text-slate-400 uppercase tracking-widest">{t('bias.title')}</p>
         <StreakBadge streak={streak} />
       </div>
 
-      {/* Prompt + help */}
       <div className="flex flex-col gap-1">
-        <p className="text-sm text-slate-300 font-medium">Will the next candle close green, red, or doji?</p>
-        <p className="text-[11px] text-slate-500 leading-relaxed">
-          Required before rolling. Get it right → next losing trade takes only -50% damage. Wrong has no penalty.
-        </p>
+        <p className="text-sm text-slate-300 font-medium">{t('bias.prompt')}</p>
+        <p className="text-[11px] text-slate-500 leading-relaxed">{t('bias.help')}</p>
       </div>
 
-      {/* Buttons */}
       <div className="flex gap-2">
-        {BUTTONS.map((btn) => {
+        {BUTTON_DEFS.map((btn) => {
           const isActive = pending === btn.value
           return (
             <motion.button
@@ -76,13 +67,12 @@ export default function BiasPanel({ pending, streak, lastResult, disabled = fals
               ].join(' ')}
             >
               <span className="text-lg leading-none">{btn.icon}</span>
-              <span className="text-xs">{btn.label}</span>
+              <span className="text-xs">{t(btn.labelKey)}</span>
             </motion.button>
           )
         })}
       </div>
 
-      {/* Last result feedback */}
       <AnimatePresence mode="wait">
         {lastResult && (
           <motion.div
@@ -96,18 +86,16 @@ export default function BiasPanel({ pending, streak, lastResult, disabled = fals
                 : 'text-slate-500 bg-slate-800/30'
             }`}
           >
-            {lastResult === 'correct' ? '✓ Correct! -50% damage next trade' : '✗ Wrong — no penalty'}
+            {t(lastResult === 'correct' ? 'bias.correct' : 'bias.wrong')}
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
   )
 }
 
-// ============ SUB-COMPONENTS ============
-
 function StreakBadge({ streak }: { streak: number }) {
+  const { t } = useT()
   if (streak < 2) return null
   return (
     <motion.div
@@ -115,7 +103,7 @@ function StreakBadge({ streak }: { streak: number }) {
       animate={{ scale: 1 }}
       className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-900/40 border border-amber-600 text-amber-400 text-xs"
     >
-      🔥 <span>{streak} streak</span>
+      🔥 <span>{t('bias.streak', { n: streak })}</span>
     </motion.div>
   )
 }
