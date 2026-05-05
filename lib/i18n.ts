@@ -61,7 +61,7 @@ const EN: Dict = {
   'trade.back':           '← Back',
 
   // Setup types
-  'setup.with_trend':         'With Trend',
+  'setup.with_trend':         'Trend Following',
   'setup.with_trendDesc':     'Price is moving one way — go with it',
   'setup.counter':            'Counter Move',
   'setup.counterDesc':        'Price ran far — bet on a reversal',
@@ -132,6 +132,11 @@ const EN: Dict = {
   'sc.biasAccuracy':      'Bias Accuracy',
   'sc.rDist':             'R-Multiple Distribution',
   'sc.diagnosis':         'Diagnosis',
+  'sc.tradeLog':          'Trade Review',
+  'sc.logAction':         'Action',
+  'sc.logResult':         'Result',
+  'sc.logAlgo':           'Algo Setup',
+  'sc.logPick':           'Your Pick',
   'sc.newRun':            'New Run',
 
   // Run-over panel
@@ -263,6 +268,11 @@ const TH: Dict = {
   'sc.biasAccuracy':      'ความแม่น Bias',
   'sc.rDist':             'การกระจาย R-Multiple',
   'sc.diagnosis':         'วินิจฉัย',
+  'sc.tradeLog':          'รีวิวเทรด',
+  'sc.logAction':         'การเทรด',
+  'sc.logResult':         'ผล',
+  'sc.logAlgo':           'Algo Setup',
+  'sc.logPick':           'ที่เลือก',
   'sc.newRun':            'รันใหม่',
 
   'over.title':           'จบรันแล้ว!',

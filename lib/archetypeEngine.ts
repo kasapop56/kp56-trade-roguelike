@@ -1,4 +1,4 @@
-import type { Stats, Run } from '@/store/gameStore'
+import type { Stats, Run, TradeRecord } from '@/store/gameStore'
 
 export type Archetype =
   | 'Breakout Chaser'
@@ -21,6 +21,7 @@ export type RunSummary = {
   rMultiples: number[]
   archetype: Archetype
   diagnosis: string[]        // 2-4 bullet insights
+  trades: TradeRecord[]      // full trade log for scorecard review
 }
 
 export function buildRunSummary(run: Run, stats: Stats): RunSummary {
@@ -52,6 +53,7 @@ export function buildRunSummary(run: Run, stats: Stats): RunSummary {
     rMultiples: active.map(t => t.rMultiple),
     archetype,
     diagnosis,
+    trades: run.trades,
   }
 }
 

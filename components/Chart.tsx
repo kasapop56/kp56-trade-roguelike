@@ -32,6 +32,13 @@ export type TradeOverlay = {
   resolved: boolean       // true → show exit marker
 }
 
+export type PastTradeMarker = {
+  action: 'buy' | 'sell'
+  entryCandleIndex: number
+  exitCandleIndex: number
+  outcome: 'win' | 'loss'
+}
+
 export type ChartProps = {
   candles: Candle[]
   revealedCount: number
@@ -39,6 +46,7 @@ export type ChartProps = {
   animating?: boolean
   animationSpeedMs?: number
   tradeOverlay?: TradeOverlay | null
+  pastTrades?: PastTradeMarker[]
   biasRefPrice?: number | null
   className?: string
 }
@@ -57,6 +65,11 @@ const ENTRY_COLOR = '#fbbf24'    // amber
 const SL_COLOR    = '#f43f5e'    // rose
 const TP_COLOR    = '#10b981'    // emerald
 
+// Muted versions for past trade markers (so active trade still stands out)
+const PAST_ENTRY_COLOR = '#78716c'   // stone-500
+const PAST_TP_COLOR    = '#15803d'   // green-700
+const PAST_SL_COLOR    = '#9f1239'   // rose-800
+
 // ============ COMPONENT ============
 
 export default function Chart({
@@ -65,6 +78,7 @@ export default function Chart({
   animating = false,
   animationSpeedMs = 200,
   tradeOverlay,
+  pastTrades,
   biasRefPrice,
   className = '',
 }: ChartProps) {
@@ -186,73 +200,102 @@ export default function Chart({
     }
   }, [revealedCount, animating, animationSpeedMs, applyCandles])
 
-  // Trade overlay: price lines + markers
+  // Trade overlay: price lines + markers (active + persistent past trades)
   useEffect(() => {
     const series  = seriesRef.current
     const markers = markersRef.current
     if (!series || !markers) return
 
-    // Clear previous overlay
+    // Clear previous price lines
     for (const line of priceLinesRef.current) series.removePriceLine(line)
     priceLinesRef.current = []
-    markers.setMarkers([])
 
-    if (!tradeOverlay) return
+    const newMarkers: SeriesMarker<Time>[] = []
 
-    const { action, entryPrice, slPrice, tpPrice, entryCandleIndex, exitCandleIndex, outcome, resolved } = tradeOverlay
-
-    // Entry / SL / TP price lines
-    priceLinesRef.current.push(series.createPriceLine({
-      price: entryPrice,
-      color: ENTRY_COLOR,
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      axisLabelVisible: true,
-      title: `Entry ${entryPrice.toFixed(2)}`,
-    }))
-    priceLinesRef.current.push(series.createPriceLine({
-      price: slPrice,
-      color: SL_COLOR,
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: `SL ${slPrice.toFixed(2)}`,
-    }))
-    priceLinesRef.current.push(series.createPriceLine({
-      price: tpPrice,
-      color: TP_COLOR,
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: `TP ${tpPrice.toFixed(2)}`,
-    }))
-
-    // Entry marker (at entry candle)
-    const entryCandle = candles[entryCandleIndex]
-    const exitCandle  = candles[exitCandleIndex]
-    if (!entryCandle) return
-
-    const newMarkers: SeriesMarker<Time>[] = [{
-      time: entryCandle.time as Time,
-      position: action === 'buy' ? 'belowBar' : 'aboveBar',
-      color: ENTRY_COLOR,
-      shape: action === 'buy' ? 'arrowUp' : 'arrowDown',
-      text: action.toUpperCase(),
-    }]
-
-    // Exit marker (only after resolved)
-    if (resolved && exitCandle) {
-      newMarkers.push({
-        time: exitCandle.time as Time,
-        position: outcome === 'win' ? 'aboveBar' : 'belowBar',
-        color: outcome === 'win' ? TP_COLOR : SL_COLOR,
-        shape: 'circle',
-        text: outcome === 'win' ? '✓ TP' : '✗ SL',
-      })
+    // 1) Persistent markers for past trades (smaller, muted)
+    if (pastTrades && pastTrades.length) {
+      for (const pt of pastTrades) {
+        const entryC = candles[pt.entryCandleIndex]
+        const exitC  = candles[pt.exitCandleIndex]
+        if (entryC) {
+          newMarkers.push({
+            time: entryC.time as Time,
+            position: pt.action === 'buy' ? 'belowBar' : 'aboveBar',
+            color: PAST_ENTRY_COLOR,
+            shape: pt.action === 'buy' ? 'arrowUp' : 'arrowDown',
+            text: '',
+          })
+        }
+        if (exitC) {
+          newMarkers.push({
+            time: exitC.time as Time,
+            position: pt.outcome === 'win' ? 'aboveBar' : 'belowBar',
+            color: pt.outcome === 'win' ? PAST_TP_COLOR : PAST_SL_COLOR,
+            shape: 'circle',
+            text: pt.outcome === 'win' ? '✓' : '✗',
+          })
+        }
+      }
     }
 
+    // 2) Active trade overlay
+    if (tradeOverlay) {
+      const { action, entryPrice, slPrice, tpPrice, entryCandleIndex, exitCandleIndex, outcome, resolved } = tradeOverlay
+
+      // Entry / SL / TP price lines (only for the active trade)
+      priceLinesRef.current.push(series.createPriceLine({
+        price: entryPrice,
+        color: ENTRY_COLOR,
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: `Entry ${entryPrice.toFixed(2)}`,
+      }))
+      priceLinesRef.current.push(series.createPriceLine({
+        price: slPrice,
+        color: SL_COLOR,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `SL ${slPrice.toFixed(2)}`,
+      }))
+      priceLinesRef.current.push(series.createPriceLine({
+        price: tpPrice,
+        color: TP_COLOR,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `TP ${tpPrice.toFixed(2)}`,
+      }))
+
+      const entryCandle = candles[entryCandleIndex]
+      const exitCandle  = candles[exitCandleIndex]
+
+      if (entryCandle) {
+        newMarkers.push({
+          time: entryCandle.time as Time,
+          position: action === 'buy' ? 'belowBar' : 'aboveBar',
+          color: ENTRY_COLOR,
+          shape: action === 'buy' ? 'arrowUp' : 'arrowDown',
+          text: action.toUpperCase(),
+        })
+      }
+
+      if (resolved && exitCandle) {
+        newMarkers.push({
+          time: exitCandle.time as Time,
+          position: outcome === 'win' ? 'aboveBar' : 'belowBar',
+          color: outcome === 'win' ? TP_COLOR : SL_COLOR,
+          shape: 'circle',
+          text: outcome === 'win' ? '✓ TP' : '✗ SL',
+        })
+      }
+    }
+
+    // Markers must be sorted by time
+    newMarkers.sort((a, b) => Number(a.time) - Number(b.time))
     markers.setMarkers(newMarkers)
-  }, [tradeOverlay, candles])
+  }, [tradeOverlay, pastTrades, candles])
 
   // Bias reference line — shows where player made their UP/DOWN guess
   useEffect(() => {

@@ -109,6 +109,16 @@ export default function GamePage() {
       }
     : null
 
+  // Persistent markers for completed (non-skip) trades from this run
+  const pastTrades: ChartProps['pastTrades'] = run.trades
+    .filter(t => t.action !== 'skip' && t.outcome !== 'skip')
+    .map(t => ({
+      action: t.action as 'buy' | 'sell',
+      entryCandleIndex: t.entryCandleIndex,
+      exitCandleIndex: t.exitCandleIndex,
+      outcome: t.outcome as 'win' | 'loss',
+    }))
+
   // What the right sidebar should show right now
   const showResolution = !!run.pendingTrade
   const showWisdom     = !!run.pendingWisdomChoices && !showResolution
@@ -147,6 +157,7 @@ export default function GamePage() {
             animating={run.awaitingTradeDecision || !!run.pendingTrade}
             animationSpeedMs={run.pendingTrade ? 180 : 300}
             tradeOverlay={tradeOverlay}
+            pastTrades={pastTrades}
             biasRefPrice={run.biasRefPrice}
             className="h-full"
           />

@@ -43,6 +43,9 @@ export type TradeRecord = {
   rMultiple: number
   session: Session
   biasWasCorrect: boolean
+  entryCandleIndex: number
+  exitCandleIndex: number
+  entryPrice: number
 }
 
 export type MysteryOutcome = {

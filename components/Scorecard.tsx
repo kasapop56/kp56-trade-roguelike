@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import type { RunSummary } from '@/lib/archetypeEngine'
+import type { TradeRecord, SetupType } from '@/store/gameStore'
 import { useT } from '@/lib/useT'
 
 export type ScorecardProps = {
@@ -78,6 +79,13 @@ export default function Scorecard({ summary, onNewRun }: ScorecardProps) {
           </div>
         )}
 
+        {summary.trades.length > 0 && (
+          <div className="px-6 py-4 border-b border-slate-800">
+            <p className="text-xs text-slate-500 mb-2">{t('sc.tradeLog')}</p>
+            <TradeLog trades={summary.trades} />
+          </div>
+        )}
+
         <div className="px-6 py-4">
           <motion.button
             onClick={onNewRun}
@@ -117,6 +125,93 @@ function WinrateBar({ wins, total, color = 'bg-emerald-500' }: { wins: number; t
         />
       </div>
       <span className="text-xs font-mono text-slate-300 w-8 text-right">{Math.round(pct)}%</span>
+    </div>
+  )
+}
+
+// ─── Trade log table ──────────────────────────────────────────────────────────
+
+const SETUP_SHORT: Record<SetupType, string> = {
+  with_trend: 'Trend',
+  counter:    'Cntr',
+  structure:  'Strct',
+  instinct:   'Inst',
+}
+
+function topSetup(record: TradeRecord): { type: SetupType; pct: number } {
+  const p = record.setupProbs
+  const entries = Object.entries(p) as Array<[SetupType, number]>
+  entries.sort((a, b) => b[1] - a[1])
+  return { type: entries[0][0], pct: Math.round(entries[0][1] * 100) }
+}
+
+function TradeLog({ trades }: { trades: TradeRecord[] }) {
+  const { t } = useT()
+  return (
+    <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-[11px] border-collapse">
+        <thead>
+          <tr className="text-slate-500">
+            <th className="text-left pb-1.5 pr-2 font-normal">#</th>
+            <th className="text-left pb-1.5 pr-2 font-normal">{t('sc.logAction')}</th>
+            <th className="text-left pb-1.5 pr-2 font-normal">{t('sc.logResult')}</th>
+            <th className="text-right pb-1.5 pr-2 font-normal">R</th>
+            <th className="text-left pb-1.5 pr-2 font-normal">{t('sc.logAlgo')}</th>
+            <th className="text-left pb-1.5 font-normal">{t('sc.logPick')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {trades.map((tr, i) => {
+            const top   = topSetup(tr)
+            const isSkip = tr.outcome === 'skip'
+            const isWin  = tr.outcome === 'win'
+            const guessMatch = tr.setupGuess === top.type
+
+            return (
+              <tr key={i} className="border-t border-slate-800/60">
+                <td className="py-1 pr-2 text-slate-500">{tr.squareIndex + 1}</td>
+                <td className="py-1 pr-2">
+                  {isSkip
+                    ? <span className="text-slate-500">SKIP</span>
+                    : <span className={tr.action === 'buy' ? 'text-emerald-400' : 'text-rose-400'}>
+                        {tr.action.toUpperCase()}
+                      </span>
+                  }
+                </td>
+                <td className="py-1 pr-2">
+                  {isSkip
+                    ? <span className="text-slate-600">—</span>
+                    : isWin
+                      ? <span className="text-emerald-400">TP ✓</span>
+                      : <span className="text-rose-400">SL ✗</span>
+                  }
+                </td>
+                <td className={`py-1 pr-2 text-right font-mono ${isSkip ? 'text-slate-600' : isWin ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {isSkip ? '—' : (tr.rMultiple >= 0 ? '+' : '') + tr.rMultiple.toFixed(1)}
+                </td>
+                {/* Algo top setup */}
+                <td className="py-1 pr-2">
+                  <span className={`inline-flex items-center gap-1 ${top.type === 'instinct' ? 'text-amber-400' : 'text-violet-300'}`}>
+                    {SETUP_SHORT[top.type]}
+                    <span className="text-slate-500">{top.pct}%</span>
+                  </span>
+                </td>
+                {/* Player's guess vs algo */}
+                <td className="py-1">
+                  {tr.setupGuess && tr.setupGuess !== top.type
+                    ? <span className="text-slate-500 line-through">{SETUP_SHORT[tr.setupGuess]}</span>
+                    : tr.setupGuess
+                      ? <span className={guessMatch ? 'text-emerald-400' : 'text-slate-500'}>
+                          {SETUP_SHORT[tr.setupGuess]} {guessMatch ? '✓' : ''}
+                        </span>
+                      : <span className="text-slate-600">—</span>
+                  }
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
