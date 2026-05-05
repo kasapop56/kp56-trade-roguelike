@@ -119,6 +119,12 @@ const EN: Dict = {
   'resolution.whyLoss':   'Price moved against you and hit Stop Loss. You lost 1R.',
   'resolution.up':        'up',
   'resolution.down':      'down',
+  'resolution.wrLabel':   'hist. win rate',
+  'resolution.wrSource':  'Based on {n} real XAUUSD M5 trades · 1:1 ATR',
+  'resolution.wrLowData': 'small sample, treat with caution',
+
+  // Setup footnote in TradePanel
+  'setup.wrFootnote':     'win rates from real XAUUSD M5 backtest',
 
   // Scorecard
   'sc.complete':          'Run Complete',
@@ -274,6 +280,11 @@ const TH: Dict = {
   'resolution.whyLoss':   'ราคาวิ่งสวนและชน Stop Loss เสีย 1R',
   'resolution.up':        'ขึ้น',
   'resolution.down':      'ลง',
+  'resolution.wrLabel':   'อัตราชนะจริง',
+  'resolution.wrSource':  'จากการ backtest {n} trade บน XAUUSD M5 · 1:1 ATR',
+  'resolution.wrLowData': 'ข้อมูลน้อย ดูเป็นแนวทางเท่านั้น',
+
+  'setup.wrFootnote':     'อัตราชนะจากการ backtest XAUUSD M5 จริง',
 
   'sc.complete':          'จบรัน',
   'sc.finalEquity':       'ทุนสุดท้าย',

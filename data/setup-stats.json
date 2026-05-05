@@ -1,0 +1,30 @@
+{
+  "generated": "2026-05-05",
+  "dataset": "xauusd-m5.json",
+  "totalSamples": 3250,
+  "atrSLMult": 1.5,
+  "atrTPMult": 1.5,
+  "forwardLimit": 40,
+  "setups": {
+    "with_trend": {
+      "samples": 797,
+      "wins": 390,
+      "winRate": 0.489
+    },
+    "counter": {
+      "samples": 50,
+      "wins": 27,
+      "winRate": 0.54
+    },
+    "structure": {
+      "samples": 1277,
+      "wins": 655,
+      "winRate": 0.513
+    },
+    "instinct": {
+      "samples": 1126,
+      "wins": 554,
+      "winRate": 0.492
+    }
+  }
+}

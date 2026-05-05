@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { TradeAction, SetupType } from '@/store/gameStore'
 import { useT } from '@/lib/useT'
+import setupStats from '@/data/setup-stats.json'
 
 export type TradePanelProps = {
   equity: number
@@ -72,23 +73,40 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
               {t('trade.setupQ')} <span className="text-slate-600">{t('trade.optional')}</span>
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {SETUP_VALUES.map((value) => (
-                <motion.button
-                  key={value}
-                  onClick={() => !disabled && handleSetupSelect(value)}
-                  disabled={disabled}
-                  whileHover={!disabled ? { scale: 1.03 } : {}}
-                  whileTap={!disabled ? { scale: 0.97 } : {}}
-                  className={[
-                    'rounded-lg border border-slate-600 bg-slate-800/40 px-3 py-2 text-left transition-colors',
-                    disabled ? 'opacity-40 cursor-not-allowed' : 'hover:border-slate-400 hover:bg-slate-700/40 cursor-pointer',
-                  ].join(' ')}
-                >
-                  <p className="text-sm text-slate-200">{t(`setup.${value}`)}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{t(`setup.${value}Desc`)}</p>
-                </motion.button>
-              ))}
+              {SETUP_VALUES.map((value) => {
+                const stat = setupStats.setups[value as keyof typeof setupStats.setups]
+                const wr   = stat ? Math.round(stat.winRate * 100) : null
+                const lowData = stat ? stat.samples < 100 : false
+                const wrColor = wr === null ? 'text-slate-600'
+                  : wr >= 53   ? 'text-emerald-400'
+                  : wr <= 47   ? 'text-rose-400'
+                  : 'text-slate-400'
+                return (
+                  <motion.button
+                    key={value}
+                    onClick={() => !disabled && handleSetupSelect(value)}
+                    disabled={disabled}
+                    whileHover={!disabled ? { scale: 1.03 } : {}}
+                    whileTap={!disabled ? { scale: 0.97 } : {}}
+                    className={[
+                      'rounded-lg border border-slate-600 bg-slate-800/40 px-3 py-2 text-left transition-colors',
+                      disabled ? 'opacity-40 cursor-not-allowed' : 'hover:border-slate-400 hover:bg-slate-700/40 cursor-pointer',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <p className="text-sm text-slate-200 leading-none">{t(`setup.${value}`)}</p>
+                      {wr !== null && (
+                        <span className={`text-[11px] font-mono font-bold leading-none shrink-0 ${wrColor}`}>
+                          {lowData ? '~' : ''}{wr}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">{t(`setup.${value}Desc`)}</p>
+                  </motion.button>
+                )
+              })}
             </div>
+            <p className="text-[10px] text-slate-600 text-right">{t('setup.wrFootnote')}</p>
             <button
               onClick={() => !disabled && setStep('action')}
               disabled={disabled}

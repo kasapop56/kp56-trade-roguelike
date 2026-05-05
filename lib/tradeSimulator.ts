@@ -135,7 +135,7 @@ export function simulateTrade(input: SimulateTradeInput): SimulateTradeResult {
 
 // ============ HELPERS ============
 
-function calcATR(candles: Candle[], endIdx: number, period: number): number {
+export function calcATR(candles: Candle[], endIdx: number, period: number): number {
   const slice = candles.slice(Math.max(0, endIdx - period), endIdx)
   if (slice.length < 2) return 5
   const trs = slice.slice(1).map((c, i) => {
@@ -164,7 +164,7 @@ type SetupClassification = {
   probs: SetupProbabilities
 }
 
-type SetupSignals = {
+export type SetupSignals = {
   breakHigh: boolean
   breakLow: boolean
   consecutive: number
@@ -177,7 +177,7 @@ type SetupSignals = {
   structureScore: number
 }
 
-function analyzeSignals(candles: Candle[], startIdx: number): SetupSignals {
+export function analyzeSignals(candles: Candle[], startIdx: number): SetupSignals {
   const lookback = candles.slice(Math.max(0, startIdx - 20), startIdx)
   if (lookback.length < 8) {
     return {

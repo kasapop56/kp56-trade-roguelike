@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import type { PendingTrade, SetupType } from '@/store/gameStore'
 import { useT } from '@/lib/useT'
+import setupStats from '@/data/setup-stats.json'
 
 export type TradeResolutionProps = {
   pending: PendingTrade
@@ -10,7 +11,6 @@ export type TradeResolutionProps = {
   onContinue: () => void
 }
 
-const SETUP_ORDER: SetupType[] = ['with_trend', 'counter', 'structure', 'instinct']
 
 export default function TradeResolution({ pending, biasWasCorrect, onContinue }: TradeResolutionProps) {
   const { t } = useT()
@@ -28,7 +28,7 @@ export default function TradeResolution({ pending, biasWasCorrect, onContinue }:
       ? t('resolution.whyLossSoftened')
       : t('resolution.whyLoss')
 
-  const { setupActual, setupReason, setupHasSignal, setupGuess, setupProbs } = result.record
+  const { setupActual, setupReason, setupHasSignal, setupGuess } = result.record
   const guessedCorrectly = setupGuess === setupActual
   const reasonText = setupReason
 
@@ -70,47 +70,14 @@ export default function TradeResolution({ pending, biasWasCorrect, onContinue }:
         </div>
       )}
 
-      {/* Setup probability bars — shown immediately after TP/SL */}
-      <div className={`rounded-lg border px-3 py-2.5 flex flex-col gap-2 ${
-        setupHasSignal
-          ? 'border-slate-600 bg-slate-800/40'
-          : 'border-amber-700/60 bg-amber-900/10'
-      }`}>
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] text-slate-400 uppercase tracking-widest">{t('resolution.setupLabel')}</p>
-          {setupGuess && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-              guessedCorrectly
-                ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700'
-                : 'bg-slate-800 text-slate-500 border border-slate-700'
-            }`}>
-              {guessedCorrectly ? t('resolution.guessRight') : t('resolution.guessWrong')}
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          {SETUP_ORDER.map((type) => {
-            const pct = (setupProbs[type] ?? 0) * 100
-            const isActual = type === setupActual
-            const isGuess  = type === setupGuess
-            return (
-              <SetupBar
-                key={type}
-                label={t(`setup.${type}`)}
-                pct={pct}
-                isActual={isActual}
-                isGuess={isGuess}
-                isInstinct={type === 'instinct'}
-              />
-            )
-          })}
-        </div>
-
-        <p className={`text-[11px] leading-relaxed mt-0.5 ${setupHasSignal ? 'text-slate-400' : 'text-amber-500/80'}`}>
-          {!setupHasSignal && '⚠ '}{reasonText}
-        </p>
-      </div>
+      {/* Setup card — detected setup + backtested win rate */}
+      <SetupCard
+        setupActual={setupActual}
+        setupGuess={setupGuess}
+        setupHasSignal={setupHasSignal}
+        reasonText={reasonText}
+        guessedCorrectly={guessedCorrectly}
+      />
 
       {!isSkip && (
         <div className="text-xs text-slate-400 px-1 leading-relaxed">{whyText}</div>
@@ -135,31 +102,95 @@ function DetailRow({ label, value, valueColor = 'text-white' }: { label: string;
   )
 }
 
-function SetupBar({ label, pct, isActual, isGuess, isInstinct }: {
-  label: string; pct: number; isActual: boolean; isGuess: boolean; isInstinct: boolean
+function SetupCard({
+  setupActual, setupGuess, setupHasSignal, reasonText, guessedCorrectly,
+}: {
+  setupActual: SetupType
+  setupGuess: SetupType | null
+  setupHasSignal: boolean
+  reasonText: string
+  guessedCorrectly: boolean
 }) {
-  const barColor = isActual
-    ? (isInstinct ? 'bg-amber-500' : 'bg-emerald-500')
-    : 'bg-slate-600'
-  const labelColor = isActual
-    ? (isInstinct ? 'text-amber-300' : 'text-emerald-300')
+  const { t } = useT()
+  const stat    = setupStats.setups[setupActual as keyof typeof setupStats.setups]
+  const wr      = stat ? Math.round(stat.winRate * 100) : null
+  const lowData = stat ? stat.samples < 100 : false
+  const isInstinct = setupActual === 'instinct'
+
+  const wrColor = wr === null ? 'text-slate-400'
+    : wr >= 53   ? 'text-emerald-400'
+    : wr <= 47   ? 'text-rose-400'
     : 'text-slate-400'
 
   return (
-    <div className="flex items-center gap-2 text-[11px]">
-      <div className="w-24 flex items-center gap-1 shrink-0">
-        <span className={`${labelColor} ${isActual ? 'font-semibold' : ''} truncate`}>{label}</span>
-        {isGuess && <span className="text-[9px] text-slate-500" title="Your guess">◀</span>}
+    <div className={`rounded-lg border px-3 py-2.5 flex flex-col gap-2 ${
+      setupHasSignal
+        ? 'border-slate-600 bg-slate-800/40'
+        : 'border-amber-700/60 bg-amber-900/10'
+    }`}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-slate-400 uppercase tracking-widest shrink-0">
+          {t('resolution.setupLabel')}
+        </p>
+        {setupGuess && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${
+            guessedCorrectly
+              ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700'
+              : 'bg-slate-800 text-slate-500 border border-slate-700'
+          }`}>
+            {guessedCorrectly ? t('resolution.guessRight') : t('resolution.guessWrong')}
+          </span>
+        )}
       </div>
-      <div className="flex-1 h-2 rounded-full bg-slate-900/60 overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${Math.max(2, pct)}%` }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
-          className={`h-full ${barColor}`}
-        />
+
+      {/* Detected setup + win rate */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-semibold ${isInstinct ? 'text-amber-300' : 'text-slate-200'}`}>
+            {t(`setup.${setupActual}`)}
+          </span>
+          {!setupHasSignal && <span className="text-amber-500/80 text-xs">⚠</span>}
+        </div>
+        {wr !== null && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 }}
+              className={`text-xl font-mono font-bold ${wrColor}`}
+            >
+              {lowData ? '~' : ''}{wr}%
+            </motion.span>
+            <span className="text-[10px] text-slate-600">{t('resolution.wrLabel')}</span>
+          </div>
+        )}
       </div>
-      <span className={`font-mono w-9 text-right tabular-nums ${labelColor}`}>{pct.toFixed(0)}%</span>
+
+      {/* Win rate bar */}
+      {wr !== null && (
+        <div className="h-1.5 rounded-full bg-slate-900/60 overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${wr}%` }}
+            transition={{ duration: 0.7, ease: 'easeOut', delay: 0.2 }}
+            className={`h-full rounded-full ${
+              wr >= 53 ? 'bg-emerald-500' : wr <= 47 ? 'bg-rose-500' : 'bg-slate-500'
+            }`}
+          />
+        </div>
+      )}
+
+      {/* Reason + sample footnote */}
+      <p className={`text-[11px] leading-relaxed ${setupHasSignal ? 'text-slate-400' : 'text-amber-500/80'}`}>
+        {reasonText}
+      </p>
+      {stat && (
+        <p className="text-[10px] text-slate-600">
+          {t('resolution.wrSource', { n: stat.samples })}
+          {lowData ? ` — ${t('resolution.wrLowData')}` : ''}
+        </p>
+      )}
     </div>
   )
 }
