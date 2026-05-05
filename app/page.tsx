@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
 import Chart from '@/components/Chart'
@@ -11,16 +12,31 @@ import TradePanel from '@/components/TradePanel'
 import Scorecard from '@/components/Scorecard'
 import WisdomPanel from '@/components/WisdomPanel'
 import TradeResolution from '@/components/TradeResolution'
+import WaitingRoom from '@/components/WaitingRoom'
+import IntroModal from '@/components/IntroModal'
+import FeedbackPanel from '@/components/FeedbackPanel'
 import type { ChartProps } from '@/components/Chart'
 import type { TradeAction, SetupType, MysteryOutcome, PerkType } from '@/store/gameStore'
 import { useT } from '@/lib/useT'
 import type { Language } from '@/lib/i18n'
+import { createClient } from '@/lib/supabase'
+import {
+  ensureProfile, markIntroSeen, incrementRunCount,
+  getActiveCount, startSession, pingSession, endSession,
+  saveGameRun, getFeedback,
+  type Profile, type FeedbackRow,
+} from '@/lib/db'
+import type { User } from '@supabase/supabase-js'
+import type { RunSummary } from '@/lib/archetypeEngine'
+
+const MAX_PLAYERS = 20
 
 const PERK_ICON: Record<PerkType, string> = {
   iron_will: '🛡', sniper: '🎯', extra_skip: '⏸', bull_vision: '👁', second_chance: '🎲',
 }
 
 export default function GamePage() {
+  const router = useRouter()
   const {
     run, stats, lastRunSummary,
     startRun, setBiasGuess, rollDice, selectLandingSquare,
@@ -31,7 +47,80 @@ export default function GamePage() {
   const { t } = useT()
   const [starting, setStarting] = useState(false)
 
-  // Bias streak (consecutive correct)
+  // ── Auth / profile state ──────────────────────────────────────────────────
+  const [user,        setUser]        = useState<User | null>(null)
+  const [profile,     setProfile]     = useState<Profile | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  // ── Capacity state ────────────────────────────────────────────────────────
+  const [atCapacity,   setAtCapacity]   = useState(false)
+  const [activeCount,  setActiveCount]  = useState(0)
+
+  // ── Overlay state ─────────────────────────────────────────────────────────
+  const [showIntro,        setShowIntro]        = useState(false)
+  const [showFeedback,     setShowFeedback]      = useState(false)
+  const [feedbackIsUpdate, setFeedbackIsUpdate]  = useState(false)
+  const [existingFeedback, setExistingFeedback]  = useState<FeedbackRow | null>(null)
+  const [currentRunNumber, setCurrentRunNumber]  = useState(0)
+
+  // ── Auth check on mount ───────────────────────────────────────────────────
+  useEffect(() => {
+    async function checkAuth() {
+      const sb = createClient()
+      const { data: { user: u } } = await sb.auth.getUser()
+      if (!u) {
+        router.push('/login')
+        return
+      }
+      setUser(u)
+      const p = await ensureProfile(u.id)
+      setProfile(p)
+      if (!p.intro_seen) setShowIntro(true)
+      setAuthLoading(false)
+    }
+    checkAuth()
+  }, [router])
+
+  // ── Session heartbeat while game is running ────────────────────────────────
+  useEffect(() => {
+    if (!run || !user) return
+    const id = setInterval(() => pingSession(user.id), 60_000)
+    return () => clearInterval(id)
+  }, [run, user])
+
+  // ── Save run + check feedback when scorecard appears ──────────────────────
+  const savedRunRef = useRef<string | null>(null)  // prevent double-save
+  useEffect(() => {
+    if (!lastRunSummary || !user || !profile) return
+    const key = `${user.id}-${lastRunSummary.finalEquity}-${lastRunSummary.biasAccuracy}`
+    if (savedRunRef.current === key) return
+    savedRunRef.current = key
+
+    async function persist() {
+      const newRunNumber = await incrementRunCount(user!.id)
+      setCurrentRunNumber(newRunNumber)
+      await saveGameRun(user!.id, lastRunSummary as RunSummary, newRunNumber)
+      await endSession(user!.id)
+
+      // Feedback logic: show on run 1, prompt to update on run 5
+      if (newRunNumber === 1) {
+        setFeedbackIsUpdate(false)
+        setExistingFeedback(null)
+        setShowFeedback(true)
+      } else if (newRunNumber === 5) {
+        const existing = await getFeedback(user!.id)
+        setExistingFeedback(existing)
+        setFeedbackIsUpdate(true)
+        setShowFeedback(true)
+      }
+
+      setProfile(p => p ? { ...p, run_count: newRunNumber } : p)
+    }
+    persist()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastRunSummary])
+
+  // ── Bias streak ───────────────────────────────────────────────────────────
   const streak = run
     ? [...run.biasHistory].reverse().findIndex(b => !b.correct)
     : 0
@@ -43,10 +132,9 @@ export default function GamePage() {
   const lastBiasResult: 'correct' | 'wrong' | null = lastBias
     ? (lastBias.correct ? 'correct' : 'wrong')
     : null
-
   const biasDamageReduction = !!lastBias?.correct
 
-  // Bias flash: show for 2.5s whenever a new bias result comes in
+  // ── Bias flash ────────────────────────────────────────────────────────────
   type BiasFlash = { guess: 'up' | 'down'; actual: 'up' | 'down'; correct: boolean }
   const [biasFlash, setBiasFlash] = useState<BiasFlash | null>(null)
   const prevBiasLen = useRef(0)
@@ -62,17 +150,41 @@ export default function GamePage() {
     prevBiasLen.current = len
   }, [run?.biasHistory.length])
 
+  // ── Start game ────────────────────────────────────────────────────────────
   async function handleStart() {
+    if (!user) return
     setStarting(true)
+
+    // Capacity check
+    const count = await getActiveCount()
+    if (count >= MAX_PLAYERS) {
+      setActiveCount(count)
+      setAtCapacity(true)
+      setStarting(false)
+      return
+    }
+
+    await startSession(user.id)
     const seed = `${Date.now()}-${Math.random().toString(36).slice(2)}`
     await startRun(seed)
+    setAtCapacity(false)
     setStarting(false)
   }
 
+  const handleRetryCapacity = useCallback(async () => {
+    if (!user) return
+    const count = await getActiveCount()
+    if (count < MAX_PLAYERS) {
+      setAtCapacity(false)
+      await handleStart()
+    } else {
+      setActiveCount(count)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
   const handleTradeAction = useCallback(
-    (action: TradeAction, setupGuess: SetupType | null) => {
-      decideTrade(action, setupGuess)
-    },
+    (action: TradeAction, setupGuess: SetupType | null) => decideTrade(action, setupGuess),
     [decideTrade],
   )
 
@@ -81,7 +193,21 @@ export default function GamePage() {
     type: run!.squares[idx].type,
   }))
 
-  // ── Scorecard overlay (shown after endRun) ──────────────────────────────
+  // ── Loading screen ────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center">
+        <p className="text-slate-500 text-sm">Loading…</p>
+      </div>
+    )
+  }
+
+  // ── Capacity full ─────────────────────────────────────────────────────────
+  if (atCapacity) {
+    return <WaitingRoom onRetry={handleRetryCapacity} />
+  }
+
+  // ── Scorecard overlay ─────────────────────────────────────────────────────
   if (lastRunSummary) {
     return (
       <div className="min-h-screen bg-[#0d0d1a] relative">
@@ -92,26 +218,48 @@ export default function GamePage() {
           summary={lastRunSummary}
           onNewRun={() => { dismissScorecard(); handleStart() }}
         />
+        {showFeedback && user && (
+          <FeedbackPanel
+            userId={user.id}
+            runNumber={currentRunNumber}
+            isUpdate={feedbackIsUpdate}
+            summary={lastRunSummary as RunSummary}
+            existingFeedback={existingFeedback}
+            onDone={() => setShowFeedback(false)}
+            onSkip={() => setShowFeedback(false)}
+          />
+        )}
       </div>
     )
   }
 
-  // ── Start screen ─────────────────────────────────────────────────────────
+  // ── Start screen ──────────────────────────────────────────────────────────
   if (!run) {
     return (
-      <StartScreen
-        onStart={handleStart}
-        starting={starting}
-        stats={stats}
-        language={language}
-        onChangeLanguage={setLanguage}
-      />
+      <>
+        <StartScreen
+          onStart={handleStart}
+          starting={starting}
+          stats={stats}
+          language={language}
+          onChangeLanguage={setLanguage}
+          userEmail={user?.email}
+          onProfile={() => router.push('/profile')}
+        />
+        {showIntro && (
+          <IntroModal
+            onDone={async () => {
+              setShowIntro(false)
+              if (user) await markIntroSeen(user.id)
+            }}
+          />
+        )}
+      </>
     )
   }
 
   const isRunOver = run.currentSquareIndex >= run.squares.length - 1
 
-  // Trade overlay for chart (after BUY/SELL → Continue)
   const tradeOverlay: ChartProps['tradeOverlay'] = run.pendingTrade && run.pendingTrade.result.action !== 'skip'
     ? {
         action: run.pendingTrade.result.action as 'buy' | 'sell',
@@ -125,7 +273,6 @@ export default function GamePage() {
       }
     : null
 
-  // Persistent markers for completed (non-skip) trades from this run
   const pastTrades: ChartProps['pastTrades'] = run.trades
     .filter(t => t.action !== 'skip' && t.outcome !== 'skip')
     .map(t => ({
@@ -135,7 +282,6 @@ export default function GamePage() {
       outcome: t.outcome as 'win' | 'loss',
     }))
 
-  // What the right sidebar should show right now
   const showResolution = !!run.pendingTrade
   const showWisdom     = !!run.pendingWisdomChoices && !showResolution
   const showMystery    = !!run.pendingMysteryOutcome && !showResolution
@@ -181,7 +327,6 @@ export default function GamePage() {
 
         {/* Sidebar */}
         <aside className="w-72 flex flex-col border-l border-slate-800 overflow-y-auto shrink-0">
-          {/* Board */}
           <div className="relative p-3 border-b border-slate-800">
             <Board
               squares={run.squares}
@@ -191,12 +336,10 @@ export default function GamePage() {
             />
           </div>
 
-          {/* Active perk persistent indicator */}
           {run.activePerk && !showResolution && !showWisdom && (
             <ActivePerkBadge perk={run.activePerk} />
           )}
 
-          {/* Bias flash overlay — shows for 2.5s after bias result resolved */}
           <AnimatePresence>
             {biasFlash && (
               <motion.div
@@ -230,11 +373,8 @@ export default function GamePage() {
             )}
           </AnimatePresence>
 
-          {/* Controls */}
           <div className="flex flex-col gap-4 p-4">
             <AnimatePresence mode="wait">
-
-              {/* Trade resolution (after BUY/SELL) */}
               {showResolution && run.pendingTrade && (
                 <TradeResolution
                   key="resolution"
@@ -243,26 +383,16 @@ export default function GamePage() {
                   onContinue={confirmTradeResult}
                 />
               )}
-
-              {/* Wisdom perk selection */}
               {showWisdom && (
                 <motion.div key="wisdom" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                  <WisdomPanel
-                    choices={run.pendingWisdomChoices!}
-                    activePerk={run.activePerk}
-                    onSelect={selectPerk}
-                  />
+                  <WisdomPanel choices={run.pendingWisdomChoices!} activePerk={run.activePerk} onSelect={selectPerk} />
                 </motion.div>
               )}
-
-              {/* Mystery outcome */}
               {showMystery && (
                 <motion.div key="mystery" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                   <MysteryResult outcome={run.pendingMysteryOutcome!} onDismiss={dismissMysteryOutcome} />
                 </motion.div>
               )}
-
-              {/* Trade panel */}
               {showTrade && (
                 <motion.div key="trade" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                   <TradePanel
@@ -273,8 +403,6 @@ export default function GamePage() {
                   />
                 </motion.div>
               )}
-
-              {/* Bias + Dice */}
               {showDice && (
                 <motion.div key="dice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
                   {showBias && (
@@ -295,8 +423,6 @@ export default function GamePage() {
                   />
                 </motion.div>
               )}
-
-              {/* Run over */}
               {isRunOver && (
                 <motion.div key="end" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="text-center py-4">
                   <p className="text-lg font-bold text-yellow-400 mb-2">{t('over.title')}</p>
@@ -311,7 +437,6 @@ export default function GamePage() {
                   </button>
                 </motion.div>
               )}
-
             </AnimatePresence>
           </div>
         </aside>
@@ -320,15 +445,9 @@ export default function GamePage() {
   )
 }
 
-// ─── Mystery result card ────────────────────────────────────────────────────
+// ─── Sub-components (unchanged) ─────────────────────────────────────────────
 
-function MysteryResult({
-  outcome,
-  onDismiss,
-}: {
-  outcome: MysteryOutcome | null
-  onDismiss: () => void
-}) {
+function MysteryResult({ outcome, onDismiss }: { outcome: MysteryOutcome | null; onDismiss: () => void }) {
   const { t } = useT()
   if (!outcome) return null
   const isGain = outcome.direction === 'gain'
@@ -340,21 +459,14 @@ function MysteryResult({
         <p className={`text-xl font-bold font-mono ${isGain ? 'text-teal-300' : 'text-rose-400'}`}>
           {isGain ? '+' : '-'}{outcome.rMultiple}R
         </p>
-        <p className="text-sm text-slate-400 mt-1">
-          {t(isGain ? 'mystery.lucky' : 'mystery.unlucky')}
-        </p>
+        <p className="text-sm text-slate-400 mt-1">{t(isGain ? 'mystery.lucky' : 'mystery.unlucky')}</p>
       </div>
-      <button
-        onClick={onDismiss}
-        className="w-full py-2 rounded-lg border border-slate-700 hover:border-slate-500 text-slate-300 text-sm transition-colors"
-      >
+      <button onClick={onDismiss} className="w-full py-2 rounded-lg border border-slate-700 hover:border-slate-500 text-slate-300 text-sm transition-colors">
         {t('mystery.continue')}
       </button>
     </div>
   )
 }
-
-// ─── Active perk badge ─────────────────────────────────────────────────────
 
 function ActivePerkBadge({ perk }: { perk: PerkType }) {
   const { t } = useT()
@@ -369,48 +481,47 @@ function ActivePerkBadge({ perk }: { perk: PerkType }) {
   )
 }
 
-// ─── Language toggle ───────────────────────────────────────────────────────
-
 function LanguageToggle({ current, onChange }: { current: Language; onChange: (lang: Language) => void }) {
   return (
     <div className="flex items-center gap-0.5 rounded-md bg-slate-800/60 border border-slate-700 p-0.5 text-xs">
-      <button
-        onClick={() => onChange('th')}
-        className={`px-2 py-0.5 rounded transition-colors ${current === 'th' ? 'bg-amber-500 text-slate-900 font-bold' : 'text-slate-400 hover:text-white'}`}
-      >
-        TH
-      </button>
-      <button
-        onClick={() => onChange('en')}
-        className={`px-2 py-0.5 rounded transition-colors ${current === 'en' ? 'bg-amber-500 text-slate-900 font-bold' : 'text-slate-400 hover:text-white'}`}
-      >
-        EN
-      </button>
+      <button onClick={() => onChange('th')} className={`px-2 py-0.5 rounded transition-colors ${current === 'th' ? 'bg-amber-500 text-slate-900 font-bold' : 'text-slate-400 hover:text-white'}`}>TH</button>
+      <button onClick={() => onChange('en')} className={`px-2 py-0.5 rounded transition-colors ${current === 'en' ? 'bg-amber-500 text-slate-900 font-bold' : 'text-slate-400 hover:text-white'}`}>EN</button>
     </div>
   )
 }
 
-// ─── Start screen ───────────────────────────────────────────────────────────
-
 function StartScreen({
-  onStart, starting, stats, language, onChangeLanguage,
+  onStart, starting, stats, language, onChangeLanguage, userEmail, onProfile,
 }: {
   onStart: () => void
   starting: boolean
   stats: { totalRuns: number; avgBiasAccuracy: number }
   language: Language
   onChangeLanguage: (lang: Language) => void
+  userEmail?: string
+  onProfile: () => void
 }) {
   const { t } = useT()
   return (
     <div className="min-h-screen bg-[#0d0d1a] flex flex-col items-center justify-center gap-8 px-4 relative">
-      <div className="absolute top-3 right-3">
+      <div className="absolute top-3 right-3 flex items-center gap-2">
         <LanguageToggle current={language} onChange={onChangeLanguage} />
       </div>
+      {userEmail && (
+        <div className="absolute top-3 left-3">
+          <button
+            onClick={onProfile}
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1.5"
+          >
+            <span className="text-slate-600">👤</span> {userEmail}
+          </button>
+        </div>
+      )}
 
       <div className="text-center">
         <h1 className="text-4xl font-bold text-yellow-400 tracking-tight mb-2">{t('app.title')}</h1>
         <p className="text-slate-400 text-lg">{t('start.tagline')}</p>
+        <p className="text-xs text-slate-600 mt-1">Beta · Real XAUUSD M5 Data</p>
       </div>
 
       {stats.totalRuns > 0 && (
@@ -420,9 +531,7 @@ function StartScreen({
             <p className="text-slate-500 text-sm">{t('start.runs')}</p>
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">
-              {(stats.avgBiasAccuracy * 100).toFixed(0)}%
-            </p>
+            <p className="text-2xl font-bold text-white">{(stats.avgBiasAccuracy * 100).toFixed(0)}%</p>
             <p className="text-slate-500 text-sm">{t('start.biasAccuracy')}</p>
           </div>
         </div>
@@ -438,9 +547,7 @@ function StartScreen({
         {starting ? t('start.loading') : stats.totalRuns > 0 ? t('start.next') : t('start.first')}
       </motion.button>
 
-      <p className="text-xs text-slate-600 max-w-xs text-center">
-        {t('app.disclaimer')}
-      </p>
+      <p className="text-xs text-slate-600 max-w-xs text-center">{t('app.disclaimer')}</p>
     </div>
   )
 }
