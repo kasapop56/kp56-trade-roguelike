@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
 import Chart from '@/components/Chart'
@@ -45,6 +45,22 @@ export default function GamePage() {
     : null
 
   const biasDamageReduction = !!lastBias?.correct
+
+  // Bias flash: show for 2.5s whenever a new bias result comes in
+  type BiasFlash = { guess: 'up' | 'down'; actual: 'up' | 'down'; correct: boolean }
+  const [biasFlash, setBiasFlash] = useState<BiasFlash | null>(null)
+  const prevBiasLen = useRef(0)
+  useEffect(() => {
+    const len = run?.biasHistory.length ?? 0
+    if (len > prevBiasLen.current && run?.biasHistory.at(-1)) {
+      const entry = run!.biasHistory.at(-1)!
+      setBiasFlash({ guess: entry.guess, actual: entry.actual, correct: entry.correct })
+      const id = setTimeout(() => setBiasFlash(null), 2500)
+      prevBiasLen.current = len
+      return () => clearTimeout(id)
+    }
+    prevBiasLen.current = len
+  }, [run?.biasHistory.length])
 
   async function handleStart() {
     setStarting(true)
@@ -179,6 +195,40 @@ export default function GamePage() {
           {run.activePerk && !showResolution && !showWisdom && (
             <ActivePerkBadge perk={run.activePerk} />
           )}
+
+          {/* Bias flash overlay — shows for 2.5s after bias result resolved */}
+          <AnimatePresence>
+            {biasFlash && (
+              <motion.div
+                key="bias-flash"
+                initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+                className={`mx-3 mb-0 px-4 py-3 rounded-xl border-2 text-center ${
+                  biasFlash.correct
+                    ? 'border-emerald-500 bg-emerald-900/40'
+                    : 'border-slate-600 bg-slate-800/60'
+                }`}
+              >
+                <p className="text-2xl mb-1">{biasFlash.correct ? '✓' : '✗'}</p>
+                <p className={`text-base font-bold ${biasFlash.correct ? 'text-emerald-300' : 'text-slate-400'}`}>
+                  {t(biasFlash.correct ? 'biasflash.correct' : 'biasflash.wrong')}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {t('biasflash.guessed')} <span className={biasFlash.guess === 'up' ? 'text-green-400' : 'text-red-400'}>
+                    {t(biasFlash.guess === 'up' ? 'bias.up' : 'bias.down')}
+                  </span>
+                  {' · '}{t('biasflash.actual')} <span className={biasFlash.actual === 'up' ? 'text-green-400' : 'text-red-400'}>
+                    {t(biasFlash.actual === 'up' ? 'bias.up' : 'bias.down')}
+                  </span>
+                </p>
+                {biasFlash.correct && (
+                  <p className="text-xs text-emerald-500 mt-1 font-medium">🛡 {t('biasflash.shield')}</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Controls */}
           <div className="flex flex-col gap-4 p-4">

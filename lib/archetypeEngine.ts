@@ -8,6 +8,8 @@ export type Archetype =
   | 'Range Bouncer'
   | 'Balanced Trader'
 
+export type DiagnosisEntry = { key: string; params?: Record<string, string | number> }
+
 export type RunSummary = {
   seed: string
   startingEquity: number
@@ -20,8 +22,8 @@ export type RunSummary = {
   biasAccuracy: number
   rMultiples: number[]
   archetype: Archetype
-  diagnosis: string[]        // 2-4 bullet insights
-  trades: TradeRecord[]      // full trade log for scorecard review
+  diagnosis: DiagnosisEntry[]  // 2-4 bullet insights (translated at render time)
+  trades: TradeRecord[]        // full trade log for scorecard review
 }
 
 export function buildRunSummary(run: Run, stats: Stats): RunSummary {
@@ -92,26 +94,26 @@ function deriveArchetype(stats: Stats, run: Run): Archetype {
 
 // ============ DIAGNOSIS ============
 
-function buildDiagnosis(run: Run, biasAccuracy: number, roi: number): string[] {
-  const lines: string[] = []
+function buildDiagnosis(run: Run, biasAccuracy: number, roi: number): DiagnosisEntry[] {
+  const lines: DiagnosisEntry[] = []
   const active = run.trades.filter(t => t.outcome !== 'skip')
   const skips  = run.trades.filter(t => t.outcome === 'skip').length
   const total  = run.trades.length
 
-  if (total === 0) return ['No trades taken this run']
+  if (total === 0) return [{ key: 'diag.noTrades' }]
 
   // Bias
   if (biasAccuracy >= 0.6)
-    lines.push(`Bias accuracy ${pct(biasAccuracy)} — strong pattern recognition`)
+    lines.push({ key: 'diag.biasGood', params: { pct: pct(biasAccuracy) } })
   else if (biasAccuracy > 0)
-    lines.push(`Bias accuracy ${pct(biasAccuracy)} — work on reading next candle direction`)
+    lines.push({ key: 'diag.biasWeak', params: { pct: pct(biasAccuracy) } })
 
   // Skip rate
   const skipRate = total > 0 ? skips / total : 0
   if (skipRate > 0.5)
-    lines.push(`Skipped ${pct(skipRate)} of trade squares — may be over-filtering`)
+    lines.push({ key: 'diag.overFilter', params: { pct: pct(skipRate) } })
   else if (skipRate < 0.1 && active.length > 3)
-    lines.push(`Took almost every trade — consider being more selective`)
+    lines.push({ key: 'diag.tooAggressive' })
 
   // Session
   const sessionWins: Record<string, { w: number; t: number }> = { asia: {w:0,t:0}, london: {w:0,t:0}, ny: {w:0,t:0} }
@@ -121,14 +123,14 @@ function buildDiagnosis(run: Run, biasAccuracy: number, roi: number): string[] {
   }
   const bestSession  = bestKey(sessionWins)
   const worstSession = worstKey(sessionWins)
-  if (bestSession  && sessionWins[bestSession].t >= 2)
-    lines.push(`Best session: ${bestSession.toUpperCase()} ${pct(sessionWins[bestSession].w / sessionWins[bestSession].t)} winrate`)
+  if (bestSession && sessionWins[bestSession].t >= 2)
+    lines.push({ key: 'diag.bestSession', params: { session: bestSession.toUpperCase(), pct: pct(sessionWins[bestSession].w / sessionWins[bestSession].t) } })
   if (worstSession && worstSession !== bestSession && sessionWins[worstSession].t >= 2)
-    lines.push(`Weakest session: ${worstSession.toUpperCase()} — consider avoiding`)
+    lines.push({ key: 'diag.worstSession', params: { session: worstSession.toUpperCase() } })
 
   // ROI
-  if (roi > 0.1)       lines.push(`Strong run: +${pct(roi)} ROI`)
-  else if (roi < -0.2) lines.push(`Rough run: ${pct(roi)} ROI — review risk management`)
+  if (roi > 0.1)       lines.push({ key: 'diag.roiGood', params: { pct: pct(roi) } })
+  else if (roi < -0.2) lines.push({ key: 'diag.roiPoor', params: { pct: pct(roi) } })
 
   return lines.slice(0, 4)
 }

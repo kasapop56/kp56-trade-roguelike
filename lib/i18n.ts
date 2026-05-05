@@ -139,6 +139,24 @@ const EN: Dict = {
   'sc.logPick':           'Your Pick',
   'sc.newRun':            'New Run',
 
+  // Bias flash overlay
+  'biasflash.correct':    'Correct!',
+  'biasflash.wrong':      'Wrong',
+  'biasflash.guessed':    'You:',
+  'biasflash.actual':     'Was:',
+  'biasflash.shield':     '-50% damage on next loss',
+
+  // Diagnosis bullets
+  'diag.noTrades':        'No trades taken this run',
+  'diag.biasGood':        'Bias accuracy {pct} — strong pattern recognition',
+  'diag.biasWeak':        'Bias accuracy {pct} — work on reading next candle direction',
+  'diag.overFilter':      'Skipped {pct} of trade squares — may be over-filtering',
+  'diag.tooAggressive':   'Took almost every trade — consider being more selective',
+  'diag.bestSession':     'Best session: {session} {pct} winrate',
+  'diag.worstSession':    'Weakest session: {session} — consider avoiding',
+  'diag.roiGood':         'Strong run: +{pct} ROI',
+  'diag.roiPoor':         'Rough run: {pct} ROI — review risk management',
+
   // Run-over panel
   'over.title':           'Run Complete!',
   'over.finalEquity':     'Final equity:',
@@ -274,6 +292,24 @@ const TH: Dict = {
   'sc.logAlgo':           'Algo Setup',
   'sc.logPick':           'ที่เลือก',
   'sc.newRun':            'รันใหม่',
+
+  // Bias flash overlay
+  'biasflash.correct':    'ถูก!',
+  'biasflash.wrong':      'ผิด',
+  'biasflash.guessed':    'ทาย:',
+  'biasflash.actual':     'จริง:',
+  'biasflash.shield':     '-50% damage trade ถัดไปที่แพ้',
+
+  // Diagnosis bullets
+  'diag.noTrades':        'ไม่มีการเทรดในรันนี้',
+  'diag.biasGood':        'ความแม่น Bias {pct} — อ่าน direction เก่ง',
+  'diag.biasWeak':        'ความแม่น Bias {pct} — ฝึกอ่านทิศทางแท่งถัดไป',
+  'diag.overFilter':      'ข้าม {pct} ของช่องเทรด — อาจ filter มากเกินไป',
+  'diag.tooAggressive':   'เทรดเกือบทุกช่อง — ลองเลือกมากขึ้น',
+  'diag.bestSession':     'Session ที่ดีที่สุด: {session} อัตราชนะ {pct}',
+  'diag.worstSession':    'Session อ่อนแอ: {session} — ลองเลี่ยง',
+  'diag.roiGood':         'รันดีมาก: +{pct} ROI',
+  'diag.roiPoor':         'รันยาก: {pct} ROI — ทบทวน risk',
 
   'over.title':           'จบรันแล้ว!',
   'over.finalEquity':     'ทุนสุดท้าย:',

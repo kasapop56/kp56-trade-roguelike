@@ -17,11 +17,17 @@ export default function Scorecard({ summary, onNewRun }: ScorecardProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-sm"
     >
-      <div className="w-full max-w-md bg-[#13131f] border border-slate-700 rounded-2xl overflow-hidden shadow-2xl">
+      <div className="flex min-h-full items-center justify-center p-4">
+      <motion.div
+        initial={{ scale: 0.97, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.05 }}
+        className="w-full max-w-md bg-[#13131f] border border-slate-700 rounded-2xl overflow-hidden shadow-2xl my-4"
+      >
         <div className="px-6 py-5 border-b border-slate-800">
           <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">{t('sc.complete')}</p>
           <h2 className="text-2xl font-bold text-white">{t(`archetype.${summary.archetype}`)}</h2>
@@ -69,10 +75,10 @@ export default function Scorecard({ summary, onNewRun }: ScorecardProps) {
           <div className="px-6 py-4 border-b border-slate-800">
             <p className="text-xs text-slate-500 mb-2">{t('sc.diagnosis')}</p>
             <ul className="flex flex-col gap-1.5">
-              {summary.diagnosis.map((line, i) => (
+              {summary.diagnosis.map((entry, i) => (
                 <li key={i} className="text-sm text-slate-300 flex gap-2">
                   <span className="text-slate-600 shrink-0">›</span>
-                  <span>{line}</span>
+                  <span>{t(entry.key, entry.params as Record<string, string>)}</span>
                 </li>
               ))}
             </ul>
@@ -96,6 +102,7 @@ export default function Scorecard({ summary, onNewRun }: ScorecardProps) {
             {t('sc.newRun')}
           </motion.button>
         </div>
+      </motion.div>
       </div>
     </motion.div>
   )
