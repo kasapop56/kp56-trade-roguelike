@@ -245,9 +245,11 @@ export default function GamePage() {
           onChangeLanguage={setLanguage}
           userEmail={user?.email}
           onProfile={() => router.push('/profile')}
+          onHelp={() => setShowIntro(true)}
         />
         {showIntro && (
           <IntroModal
+            language={language}
             onDone={async () => {
               setShowIntro(false)
               if (user) await markIntroSeen(user.id)
@@ -304,9 +306,25 @@ export default function GamePage() {
           <span className="text-slate-400">
             {t('app.square')} <span className="text-white">{Math.max(0, run.currentSquareIndex + 1)}/30</span>
           </span>
+          <button
+            onClick={() => setShowIntro(true)}
+            title={language === 'th' ? 'คู่มือ' : 'Help'}
+            className="w-6 h-6 rounded-full border border-slate-600 text-slate-400
+                       hover:border-slate-400 hover:text-white text-xs font-bold
+                       flex items-center justify-center transition-colors"
+          >
+            ?
+          </button>
           <LanguageToggle current={language} onChange={setLanguage} />
         </div>
       </header>
+
+      {showIntro && (
+        <IntroModal
+          language={language}
+          onDone={() => setShowIntro(false)}
+        />
+      )}
 
       {/* Main: chart + sidebar */}
       <div className="flex flex-1 overflow-hidden">
@@ -491,7 +509,7 @@ function LanguageToggle({ current, onChange }: { current: Language; onChange: (l
 }
 
 function StartScreen({
-  onStart, starting, stats, language, onChangeLanguage, userEmail, onProfile,
+  onStart, starting, stats, language, onChangeLanguage, userEmail, onProfile, onHelp,
 }: {
   onStart: () => void
   starting: boolean
@@ -500,11 +518,21 @@ function StartScreen({
   onChangeLanguage: (lang: Language) => void
   userEmail?: string
   onProfile: () => void
+  onHelp: () => void
 }) {
   const { t } = useT()
   return (
     <div className="min-h-screen bg-[#0d0d1a] flex flex-col items-center justify-center gap-8 px-4 relative">
       <div className="absolute top-3 right-3 flex items-center gap-2">
+        <button
+          onClick={onHelp}
+          title={language === 'th' ? 'คู่มือ' : 'Help'}
+          className="w-6 h-6 rounded-full border border-slate-600 text-slate-400
+                     hover:border-slate-400 hover:text-white text-xs font-bold
+                     flex items-center justify-center transition-colors"
+        >
+          ?
+        </button>
         <LanguageToggle current={language} onChange={onChangeLanguage} />
       </div>
       {userEmail && (
