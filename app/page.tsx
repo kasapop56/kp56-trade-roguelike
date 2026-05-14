@@ -17,6 +17,7 @@ import IntroModal from '@/components/IntroModal'
 import FeedbackPanel from '@/components/FeedbackPanel'
 import type { ChartProps } from '@/components/Chart'
 import type { TradeAction, SetupType, MysteryOutcome, PerkType } from '@/store/gameStore'
+import { getSignalRating, type SignalRating } from '@/lib/tradeSimulator'
 import { useT } from '@/lib/useT'
 import type { Language } from '@/lib/i18n'
 import { createClient } from '@/lib/supabase'
@@ -291,6 +292,10 @@ export default function GamePage() {
   const showDice       = !showTrade && !showWisdom && !showMystery && !showResolution && !isRunOver
   const showBias       = showDice && run.diceValue === null
 
+  const tradeSignal: SignalRating | null = showTrade && run.currentSquareIndex >= 0
+    ? getSignalRating(run.candles, run.squares[run.currentSquareIndex].candleStart)
+    : null
+
   return (
     <div className="min-h-screen bg-[#0d0d1a] text-white flex flex-col">
       {/* Top bar */}
@@ -417,6 +422,7 @@ export default function GamePage() {
                     equity={run.equity}
                     riskAmount={run.equity * 0.1}
                     biasDamageReduction={biasDamageReduction}
+                    signalRating={tradeSignal}
                     onAction={handleTradeAction}
                   />
                 </motion.div>

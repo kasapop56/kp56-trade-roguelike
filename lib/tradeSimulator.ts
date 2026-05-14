@@ -381,3 +381,64 @@ function buildSkipResult(
     outcome: 'skip',
   }
 }
+
+// ============ SIGNAL RATING ============
+
+export type SignalLevel = 'go' | 'warn' | 'wait' | 'skip'
+
+export type SignalRating = {
+  level: SignalLevel
+  reasonEn: string
+  reasonTh: string
+}
+
+export function getSignalRating(candles: Candle[], startIdx: number): SignalRating {
+  const s = analyzeSignals(candles, startIdx)
+
+  if (!s.hasEnoughData) {
+    return {
+      level: 'skip',
+      reasonEn: 'Not enough data — pure gut call',
+      reasonTh: 'ข้อมูลไม่พอ — ลองข้ามดู',
+    }
+  }
+
+  const sumRaw = s.trendScore + s.counterScore + s.structureScore
+  const maxRaw = Math.max(s.trendScore, s.counterScore, s.structureScore)
+
+  // GO: strong single signal dominates
+  if (sumRaw >= 4 && maxRaw >= 3) {
+    const src = s.structureScore >= 3 ? (s.breakHigh ? 'Breakout ↑' : 'Breakdown ↓')
+      : s.trendScore >= 3 ? `Trend (${s.consecutive} bars)`
+      : 'Counter move'
+    const srcTh = s.structureScore >= 3 ? (s.breakHigh ? 'ทะลุแนวต้าน ↑' : 'ทะลุแนวรับ ↓')
+      : s.trendScore >= 3 ? `เทรนด์ต่อเนื่อง ${s.consecutive} แท่ง`
+      : 'Counter move ชัด'
+    return { level: 'go', reasonEn: src, reasonTh: srcTh }
+  }
+
+  // WARN: moderate signal present
+  if (sumRaw >= 2 && maxRaw >= 2) {
+    return {
+      level: 'warn',
+      reasonEn: 'Moderate signal — size down',
+      reasonTh: 'สัญญาณพอมี — ระวัง size',
+    }
+  }
+
+  // WAIT: weak signal
+  if (sumRaw >= 1) {
+    return {
+      level: 'wait',
+      reasonEn: 'Weak / conflicting signals',
+      reasonTh: 'สัญญาณอ่อน — พิจารณาข้าม',
+    }
+  }
+
+  // SKIP: no signal
+  return {
+    level: 'skip',
+    reasonEn: 'No edge detected — instinct only',
+    reasonTh: 'ไม่มี edge — ดวงล้วนๆ',
+  }
+}

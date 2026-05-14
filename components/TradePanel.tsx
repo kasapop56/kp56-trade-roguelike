@@ -5,18 +5,27 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { TradeAction, SetupType } from '@/store/gameStore'
 import { useT } from '@/lib/useT'
 import setupStats from '@/data/setup-stats.json'
+import type { SignalRating, SignalLevel } from '@/lib/tradeSimulator'
 
 export type TradePanelProps = {
   equity: number
   riskAmount: number
   biasDamageReduction: boolean
+  signalRating?: SignalRating | null
   disabled?: boolean
   onAction: (action: TradeAction, setupGuess: SetupType | null) => void
 }
 
+const SIGNAL_STYLES: Record<SignalLevel, { border: string; bg: string; text: string; dot: string }> = {
+  go:   { border: 'border-emerald-500', bg: 'bg-emerald-900/30', text: 'text-emerald-300', dot: 'bg-emerald-400' },
+  warn: { border: 'border-amber-500',   bg: 'bg-amber-900/30',   text: 'text-amber-300',   dot: 'bg-amber-400'   },
+  wait: { border: 'border-orange-600',  bg: 'bg-orange-900/20',  text: 'text-orange-300',  dot: 'bg-orange-500'  },
+  skip: { border: 'border-slate-600',   bg: 'bg-slate-800/40',   text: 'text-slate-400',   dot: 'bg-slate-500'   },
+}
+
 const SETUP_VALUES: SetupType[] = ['with_trend', 'counter', 'structure', 'instinct']
 
-export default function TradePanel({ equity, riskAmount, biasDamageReduction, disabled = false, onAction }: TradePanelProps) {
+export default function TradePanel({ equity, riskAmount, biasDamageReduction, signalRating, disabled = false, onAction }: TradePanelProps) {
   const { t } = useT()
   const [setupGuess, setSetupGuess] = useState<SetupType | null>(null)
   const [step, setStep] = useState<'setup' | 'action'>('setup')
@@ -46,6 +55,8 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
           </motion.span>
         )}
       </div>
+
+      {signalRating && <SignalBadge rating={signalRating} />}
 
       <p className="text-[11px] text-slate-500 leading-relaxed">{t('trade.help')}</p>
 
@@ -164,6 +175,26 @@ export default function TradePanel({ equity, riskAmount, biasDamageReduction, di
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+function SignalBadge({ rating }: { rating: SignalRating }) {
+  const { t, lang } = useT()
+  const s = SIGNAL_STYLES[rating.level]
+  const reason = lang === 'th' ? rating.reasonTh : rating.reasonEn
+  const label = t(`signal.${rating.level}`)
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${s.border} ${s.bg}`}
+    >
+      <span className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
+      <div className="flex-1 min-w-0">
+        <span className={`text-xs font-bold tracking-widest ${s.text}`}>{label}</span>
+        <span className="text-[11px] text-slate-500 ml-2 truncate">{reason}</span>
+      </div>
+    </motion.div>
   )
 }
 

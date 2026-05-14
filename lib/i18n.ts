@@ -60,6 +60,13 @@ const EN: Dict = {
   'trade.skip':           'SKIP',
   'trade.back':           '← Back',
 
+  // Signal rating badge
+  'signal.label':    'Signal',
+  'signal.go':       'GO',
+  'signal.warn':     'WARN',
+  'signal.wait':     'WAIT',
+  'signal.skip':     'NO EDGE',
+
   // Setup types
   'setup.with_trend':         'Trend Following',
   'setup.with_trendDesc':     'Price is moving one way — go with it',
@@ -225,6 +232,13 @@ const TH: Dict = {
   'trade.sell':           'ขาย',
   'trade.skip':           'ข้าม',
   'trade.back':           '← กลับ',
+
+  // Signal rating badge
+  'signal.label':    'สัญญาณ',
+  'signal.go':       'GO',
+  'signal.warn':     'WARN',
+  'signal.wait':     'WAIT',
+  'signal.skip':     'ไม่มี edge',
 
   'setup.with_trend':         'ตามเทรนด์',
   'setup.with_trendDesc':     'ราคาวิ่งทิศเดียว — เปิดตาม',
